@@ -29,3 +29,4 @@ cache/
 
 # Eval outputs
 tests/eval/results/
+.mcp.json
