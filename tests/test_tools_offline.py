@@ -15,8 +15,14 @@ from typing import Any
 import pytest
 
 from matscout.cache import Cache
-from matscout.models import Candidate, SearchFilters
-from matscout.tools import MaterialNotFoundError, get_material, search_materials
+from matscout.models import Candidate, SearchFilters, Verdict
+from matscout.tools import (
+    MaterialNotFoundError,
+    check_stability,
+    compare_materials,
+    get_material,
+    search_materials,
+)
 from matscout.tools._client import set_cache, set_client
 
 # ── tiny fixture machinery — mock MPRester ──────────────────────────────────
@@ -75,6 +81,12 @@ class _FakeSummary:
     def search(self, **kwargs: Any) -> list[_FakeDoc]:
         self.last_kwargs = kwargs
         self.call_count += 1
+        # When a specific id is requested (as get_material does), filter the
+        # canned docs to match — otherwise the fake would always return the
+        # same doc regardless of which id you asked for.
+        wanted_ids = kwargs.get("material_ids")
+        if wanted_ids:
+            return [d for d in self.docs if d.material_id in wanted_ids]
         return self.docs
 
 
@@ -287,3 +299,99 @@ def test_get_material_handles_missing_bulk_modulus() -> None:
     m = get_material("mp-149")
     assert m.bulk_modulus is None
     assert m.shear_modulus is None
+
+
+# ── compare_materials ──────────────────────────────────────────────────────
+
+
+def test_compare_default_properties() -> None:
+    t = compare_materials(["mp-149", "mp-2534"])
+    assert len(t.rows) == 2
+    assert "band_gap" in t.properties
+    assert "density" in t.properties
+    si_row = next(r for r in t.rows if r.material_id == "mp-149")
+    gaas_row = next(r for r in t.rows if r.material_id == "mp-2534")
+    assert si_row.values["band_gap"] == 0.61
+    assert gaas_row.values["band_gap"] == 1.42
+
+
+def test_compare_custom_properties() -> None:
+    t = compare_materials(["mp-149"], properties=["density", "is_metal"])
+    assert t.properties == ["density", "is_metal"]
+    assert t.rows[0].values == {"density": 2.33, "is_metal": False}
+
+
+def test_compare_dotted_property_path() -> None:
+    t = compare_materials(["mp-149"], properties=["symmetry.crystal_system"])
+    assert t.rows[0].values["symmetry.crystal_system"] == "Cubic"
+
+
+def test_compare_rejects_empty_input() -> None:
+    with pytest.raises(ValueError):
+        compare_materials([])
+
+
+def test_compare_passes_through_get_material_cache() -> None:
+    """compare_materials shouldn't call MP if get_material has it cached."""
+    from matscout.tools._client import get_client
+
+    client = get_client()
+    get_material("mp-149")
+    get_material("mp-2534")
+    base = client.materials.summary.call_count  # type: ignore[attr-defined]
+
+    compare_materials(["mp-149", "mp-2534"])
+    assert client.materials.summary.call_count == base  # type: ignore[attr-defined]
+
+
+# ── check_stability ────────────────────────────────────────────────────────
+
+
+def test_check_stability_on_hull_returns_stable() -> None:
+    r = check_stability("mp-149")  # fake doc has e_above_hull=0.0
+    assert r.verdict is Verdict.STABLE
+    assert "convex hull" in r.explanation.lower()
+
+
+def test_check_stability_metastable(tmp_path: Path) -> None:
+    docs = [
+        _FakeDoc(
+            material_id="mp-meta",
+            formula_pretty="X",
+            elements=[_FakeElement("X")],
+            nelements=1,
+            energy_above_hull=0.018,
+            is_stable=False,
+        )
+    ]
+    set_client(_FakeClient(docs=docs))
+    set_cache(Cache(db_path=tmp_path / "meta.db", ttl_seconds=3600))
+
+    r = check_stability("mp-meta")
+    assert r.verdict is Verdict.METASTABLE
+    assert "18 meV/atom" in r.explanation
+
+
+def test_check_stability_unstable(tmp_path: Path) -> None:
+    docs = [
+        _FakeDoc(
+            material_id="mp-unstable",
+            formula_pretty="Y",
+            elements=[_FakeElement("Y")],
+            nelements=1,
+            energy_above_hull=0.5,
+            is_stable=False,
+        )
+    ]
+    set_client(_FakeClient(docs=docs))
+    set_cache(Cache(db_path=tmp_path / "unstable.db", ttl_seconds=3600))
+
+    r = check_stability("mp-unstable")
+    assert r.verdict is Verdict.UNSTABLE
+    assert "500 meV/atom" in r.explanation
+
+
+def test_check_stability_propagates_not_found() -> None:
+    set_client(_FakeClient(docs=[]))
+    with pytest.raises(MaterialNotFoundError):
+        check_stability("mp-nope")

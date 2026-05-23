@@ -7,7 +7,15 @@ inside the tools by who's calling — that's the whole architectural point.
 
 from __future__ import annotations
 
+from matscout.tools.compare import compare_materials
 from matscout.tools.get import MaterialNotFoundError, get_material
 from matscout.tools.search import search_materials
+from matscout.tools.stability import check_stability
 
-__all__ = ["MaterialNotFoundError", "get_material", "search_materials"]
+__all__ = [
+    "MaterialNotFoundError",
+    "check_stability",
+    "compare_materials",
+    "get_material",
+    "search_materials",
+]
