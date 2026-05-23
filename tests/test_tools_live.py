@@ -28,7 +28,7 @@ pytestmark = pytest.mark.live
 
 
 def test_live_search_si_o_in_band_gap_window() -> None:
-    """Si-O materials with band_gap in 1.0–2.0 eV should exist (sub-stoichiometric SiO_x)."""
+    """Si-O materials with band_gap in 1.0-2.0 eV should exist (sub-stoichiometric SiO_x)."""
     hits = search_materials(elements=["Si", "O"], band_gap_range=(1.0, 2.0), limit=20)
     assert len(hits) > 0, "expected at least one Si-O candidate in band-gap window"
     for c in hits:
@@ -49,9 +49,7 @@ def test_live_search_only_stable_filter() -> None:
 
 def test_live_search_exclude_elements_works() -> None:
     """Asking for 'Si' but excluding 'O' must not return any oxides."""
-    hits = search_materials(
-        elements=["Si"], exclude_elements=["O"], only_stable=True, limit=10
-    )
+    hits = search_materials(elements=["Si"], exclude_elements=["O"], only_stable=True, limit=10)
     for c in hits:
         assert "O" not in c.elements
 
@@ -106,7 +104,7 @@ def test_live_silicon_is_stable() -> None:
 def test_live_acceptance_semiconductor_for_solar_cell() -> None:
     """Acceptance #1: 'Stable semiconductor with band gap ~1.5 eV for solar cell.'
 
-    1.0–1.7 eV is the Shockley-Queisser sweet spot for single-junction PV.
+    1.0-1.7 eV is the Shockley-Queisser sweet spot for single-junction PV.
     Tools must surface real, named candidates — not an empty list.
     """
     hits = search_materials(
