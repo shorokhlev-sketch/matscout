@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>matscout — Materials Project research agent</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/styles.css">
+<!-- Minimal markdown render — covers code, headers, tables, lists -->
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+
+<header class="top">
+  <span class="brand">matscout</span>
+  <span class="tag">MCP server + OpenAI agent over Materials Project</span>
+  <span class="meta">
+    <a href="https://next-gen.materialsproject.org/" target="_blank" rel="noopener">MP</a>
+    <span> · </span>
+    <a href="/docs" target="_blank">OpenAPI</a>
+  </span>
+</header>
+
+<main>
+  <section class="col left">
+    <h1>Ask a materials question</h1>
+    <p class="intro">
+      Type a natural-language description of a material you need.
+      The agent will translate it to property filters, query the database,
+      self-correct if it gets zero or too many hits, and synthesize a
+      ranked shortlist with trade-offs.
+    </p>
+
+    <label class="q-label" for="q">Your query</label>
+    <textarea id="q" placeholder="Find a stable semiconductor with band gap near 1.5 eV for a solar cell. Give me three candidates with their formula, band gap, and density."></textarea>
+
+    <div class="btn-row">
+      <button id="run" class="primary">Ask matscout →</button>
+      <button id="reset" class="ghost" type="button">Clear</button>
+    </div>
+
+    <div class="examples">
+      <h2>Examples</h2>
+      <ul id="examples">
+        <li>Find a stable semiconductor with band gap near 1.5 eV for a solar cell. Three candidates with formula, band gap and density.</li>
+        <li>Thermoelectric with low density (under 5 g/cm³) — three candidates and compare them. Explain the trade-offs.</li>
+        <li>Suggest sodium-based electrode candidates and sort them by stability. Top five only.</li>
+        <li>Is mp-149 stable? Give a one-sentence verdict.</li>
+        <li>Compare Si (mp-149) and diamond (mp-66) on band gap, density and stability.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="col right">
+    <h2>Agent trace</h2>
+    <div id="trace"></div>
+    <div id="status" class="status"></div>
+
+    <h2>Answer</h2>
+    <div id="answer"></div>
+  </section>
+</main>
+
+<footer>
+  Data: <a href="https://next-gen.materialsproject.org/" target="_blank" rel="noopener">Materials Project</a> · CC-BY 4.0.
+  Agent: OpenAI gpt-4o. UI: vanilla JS, FastAPI, SSE.
+</footer>
+
+<script>
+const $ = (sel) => document.querySelector(sel);
+const trace = $('#trace');
+const answerEl = $('#answer');
+const statusEl = $('#status');
+const runBtn = $('#run');
+
+function addEvent(kind, body) {
+  const row = document.createElement('div');
+  row.className = `ev ${kind}`;
+  row.innerHTML = `<span class="badge">${kind.replace('_', ' ')}</span><span class="body"></span>`;
+  row.querySelector('.body').innerHTML = body;
+  trace.appendChild(row);
+  row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function setStatus(text, cls) {
+  statusEl.textContent = text;
+  statusEl.className = `status ${cls || ''}`;
+}
+
+async function ask(query) {
+  trace.innerHTML = '';
+  answerEl.innerHTML = '';
+  setStatus('Connecting…', 'live');
+  runBtn.disabled = true;
+
+  let buffer = '';
+  let eventName = 'message';
+
+  try {
+    const resp = await fetch('/api/query', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query }),
+    });
+    if (!resp.ok || !resp.body) {
+      const text = await resp.text();
+      addEvent('tool_error', `<span class="detail">HTTP ${resp.status}: ${text}</span>`);
+      setStatus('Error', '');
+      return;
+    }
+    setStatus('Thinking…', 'live');
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      let idx;
+      while ((idx = buffer.indexOf('\n\n')) !== -1) {
+        const raw = buffer.slice(0, idx);
+        buffer = buffer.slice(idx + 2);
+        const lines = raw.split('\n');
+        let dataLine = '';
+        for (const ln of lines) {
+          if (ln.startsWith('event:')) eventName = ln.slice(6).trim();
+          else if (ln.startsWith('data:')) dataLine += ln.slice(5).trim();
+        }
+        if (!dataLine) continue;
+        let payload;
+        try { payload = JSON.parse(dataLine); } catch { continue; }
+        handleEvent(eventName, payload);
+      }
+    }
+  } catch (e) {
+    addEvent('tool_error', `<span class="detail">${e.message}</span>`);
+    setStatus('Error', '');
+  } finally {
+    runBtn.disabled = false;
+  }
+}
+
+function handleEvent(kind, p) {
+  if (p.kind === 'tool_call') {
+    const argSummary = p.args ? Object.entries(p.args)
+      .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
+      .join(', ') : '';
+    addEvent('tool_call', `<span class="name">${p.name}</span><span class="detail">(${argSummary})</span>`);
+  } else if (p.kind === 'tool_result') {
+    addEvent('tool_result', `<span class="name">${p.name || ''}</span><span class="detail">→ ${p.result_summary || 'ok'}</span>`);
+  } else if (p.kind === 'tool_error') {
+    addEvent('tool_error', `<span class="name">${p.name || ''}</span><span class="detail">⨯ ${p.error}</span>`);
+  } else if (p.kind === 'final') {
+    answerEl.innerHTML = marked.parse(p.content || '');
+    setStatus(`Done · ${trace.querySelectorAll('.ev.tool_call').length} tool call(s)`, 'done');
+  }
+}
+
+runBtn.addEventListener('click', () => {
+  const q = $('#q').value.trim();
+  if (q) ask(q);
+});
+
+$('#reset').addEventListener('click', () => {
+  $('#q').value = '';
+  trace.innerHTML = '';
+  answerEl.innerHTML = '';
+  setStatus('');
+});
+
+document.querySelectorAll('#examples li').forEach((li) => {
+  li.addEventListener('click', () => {
+    $('#q').value = li.textContent.trim();
+    $('#q').focus();
+  });
+});
+
+// Submit on Cmd/Ctrl + Enter
+$('#q').addEventListener('keydown', (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+    e.preventDefault();
+    runBtn.click();
+  }
+});
+</script>
+</body>
+</html>
