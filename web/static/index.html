@@ -156,6 +156,12 @@ function handleEvent(kind, p) {
   } else if (p.kind === 'final') {
     answerEl.innerHTML = marked.parse(p.content || '');
     setStatus(`Done · ${trace.querySelectorAll('.ev.tool_call').length} tool call(s)`, 'done');
+    return;
+  }
+  // After a tool_result, the model is thinking — show that explicitly so
+  // the user understands the gap before the next tool_call or final.
+  if (p.kind === 'tool_result' || p.kind === 'tool_error') {
+    setStatus('Model thinking…', 'live');
   }
 }
 

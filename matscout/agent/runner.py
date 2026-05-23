@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -152,17 +153,31 @@ def stream_agent(
             }
         )
 
+        # Emit tool_call events first (so the UI sees them all at once),
+        # then dispatch in parallel. Each MP/cache call holds the GIL only
+        # briefly; the long wait is the HTTP round-trip, so threads scale.
+        planned: list[tuple[Any, str, str, dict[str, Any]]] = []
         for tc in msg.tool_calls:
             name = tc.function.name  # type: ignore[union-attr]
             args_json = tc.function.arguments  # type: ignore[union-attr]
-            args_pretty: dict[str, Any]
             try:
                 args_pretty = json.loads(args_json) if args_json else {}
             except json.JSONDecodeError:
                 args_pretty = {"_raw": args_json}
-
             yield TraceEvent(kind="tool_call", name=name, args=args_pretty)
-            result, error = _dispatch_tool(name, args_json)
+            planned.append((tc, name, args_json, args_pretty))
+
+        # Fan out — but keep results in OpenAI's original order so tool_call_id
+        # alignment in `messages` stays correct.
+        if len(planned) > 1:
+            with ThreadPoolExecutor(max_workers=min(len(planned), 5)) as pool:
+                outcomes = list(pool.map(lambda p: _dispatch_tool(p[1], p[2]), planned))
+        else:
+            outcomes = [_dispatch_tool(planned[0][1], planned[0][2])]
+
+        for (tc, name, _args_json, _args_pretty), (result, error) in zip(
+            planned, outcomes, strict=True
+        ):
             if error is not None:
                 yield TraceEvent(kind="tool_error", name=name, error=error)
                 tool_message_content = json.dumps({"error": error})
