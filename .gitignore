@@ -1,0 +1,31 @@
+# Secrets
+.env
+.env.local
+
+# uv / Python
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+build/
+dist/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# Cache
+cache/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Editor
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Eval outputs
+tests/eval/results/

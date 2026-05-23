@@ -1,0 +1,75 @@
+[project]
+name = "matscout"
+version = "0.1.0"
+description = "MCP server + agent over Materials Project — NL queries to material candidates"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Lev" }]
+keywords = ["mcp", "materials-project", "agent", "openai", "scientific-computing"]
+
+dependencies = [
+    "mp-api>=0.42",
+    "mcp[cli]>=1.2",
+    "openai>=1.55",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "sse-starlette>=2.1",
+    "structlog>=24.4",
+    "httpx>=0.28",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-mock>=3.14",
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "types-pyyaml",
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+matscout = "matscout.cli:main"
+matscout-mcp = "matscout.mcp_server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["matscout"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
+ignore = ["E501"]  # длинные строки разрешены в docstrings/литералах
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+no_implicit_optional = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = "mp_api.*"
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "live: hits real Materials Project / OpenAI API (skipped if creds missing)",
+]
+asyncio_mode = "auto"
