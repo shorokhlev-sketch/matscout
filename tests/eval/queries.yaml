@@ -1,0 +1,66 @@
+# matscout agent eval — natural-language queries × structured assertions.
+#
+# Each case runs the full agent loop against a real OpenAI + real MP.
+# Assertions are deliberately loose where the answer is open-ended;
+# strict where we know what *must* happen (a particular tool must fire).
+#
+# Run:   uv run pytest tests/eval/ -v -m live
+
+- name: solar_pv_semiconductor
+  query: >
+    Find a stable semiconductor with a band gap near 1.5 eV
+    suitable for a single-junction solar cell.
+    Give me three candidates with their formula, band gap, and density.
+  assertions:
+    tools_used_at_least_one_of: [search_materials]
+    answer_contains_any:
+      - "mp-"
+    answer_contains_all:
+      - "band gap"
+    answer_min_chars: 200
+    max_turns: 8
+
+- name: thermoelectric_low_density
+  query: >
+    I need a thermoelectric material with low density (under 5 g/cm^3).
+    Give me three candidates and compare them.
+    Explain the trade-offs.
+  assertions:
+    tools_used_at_least_one_of: [search_materials]
+    tools_used_all_of: [compare_materials]
+    answer_contains_any:
+      - "density"
+    answer_min_chars: 200
+    max_turns: 8
+
+- name: sodium_electrode_by_stability
+  query: >
+    Suggest sodium-based electrode candidates and sort them by stability.
+    Top five only.
+  assertions:
+    tools_used_at_least_one_of: [search_materials]
+    answer_contains_any:
+      - "Na"
+      - "sodium"
+    answer_min_chars: 150
+    max_turns: 8
+
+- name: known_id_property_lookup
+  query: "What is the band gap of mp-149 (silicon)? Give me one number."
+  assertions:
+    tools_used_at_least_one_of: [get_material, check_stability]
+    answer_contains_any:
+      - "0.6"
+      - "0.7"
+      - "eV"
+    answer_min_chars: 20
+    max_turns: 4
+
+- name: stability_check_single
+  query: "Is mp-149 stable? Give me a one-sentence verdict."
+  assertions:
+    tools_used_at_least_one_of: [check_stability, get_material]
+    answer_contains_any:
+      - "stable"
+    answer_min_chars: 10
+    max_turns: 4
