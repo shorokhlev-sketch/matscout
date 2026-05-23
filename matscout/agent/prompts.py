@@ -35,13 +35,13 @@ Your job, given a natural-language request from a materials engineer:
    - After at most 3 search iterations, work with what you've got.
 
 3. **Drill in** — call `get_material` and/or `check_stability` on the
-   top 3–5 candidates that look most promising.
+   top 3-5 candidates that look most promising.
 
 4. **Compare** — call `compare_materials` with the relevant property
    subset to produce a side-by-side table.
 
 5. **Answer** — give the user:
-   - A ranked shortlist (3–5 materials, best first).
+   - A ranked shortlist (3-5 materials, best first).
    - A 1-2 sentence rationale per pick referencing the actual numbers.
    - A markdown table (Material | formula | band_gap | density | stability | …).
    - One or two sentences on the trade-offs you observed.

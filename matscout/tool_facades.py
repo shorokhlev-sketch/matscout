@@ -13,6 +13,7 @@ truth. These facades:
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from matscout.models import SearchFilters
@@ -92,4 +93,9 @@ def check_stability(material_id: str) -> dict[str, Any]:
 
 
 # Canonical registry — both MCP server and agent runner iterate over this list.
-ALL_TOOLS = [search_materials, get_material, compare_materials, check_stability]
+ALL_TOOLS: list[Callable[..., Any]] = [
+    search_materials,
+    get_material,
+    compare_materials,
+    check_stability,
+]
