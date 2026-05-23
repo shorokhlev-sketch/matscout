@@ -38,7 +38,7 @@ def compare_materials(
     material_ids: list[str],
     properties: list[str] | None = None,
 ) -> ComparisonTable:
-    """Build a row-per-material × column-per-property table for UI rendering.
+    """Build a row-per-material x column-per-property table for UI rendering.
 
     Properties default to a sensible set (band_gap, density, e_above_hull,
     formation_energy_per_atom, is_metal, is_stable). Dotted paths work for
