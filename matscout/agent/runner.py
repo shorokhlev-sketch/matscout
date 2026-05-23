@@ -108,8 +108,10 @@ def stream_agent(
     client: OpenAI | None = None,
 ) -> Iterator[TraceEvent]:
     """Yield TraceEvents as they happen. End with a 'final' event."""
-    settings = get_settings()
-    client = client or OpenAI(api_key=settings.openai_api_key)
+    if client is None:
+        # Only touch env-backed Settings if we actually need to build a real
+        # client — lets unit tests inject a fake without setting MP/OpenAI keys.
+        client = OpenAI(api_key=get_settings().openai_api_key)
     tools = tools_to_openai_specs(ALL_TOOLS)
 
     messages: list[dict[str, Any]] = [

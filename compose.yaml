@@ -1,0 +1,29 @@
+# One-command local spin-up: `docker compose up --build`.
+# Reads secrets from .env at repo root (gitignored).
+
+services:
+  web:
+    build: .
+    container_name: matscout-web
+    env_file: .env
+    ports:
+      - "8000:8000"
+    volumes:
+      # Persist the SQLite tool-result cache between container restarts.
+      - matscout-cache:/app/cache
+    restart: unless-stopped
+
+  # Run the MCP server instead of the web playground:
+  #   docker compose run --rm mcp
+  mcp:
+    build: .
+    profiles: ["mcp"]
+    env_file: .env
+    command: ["python", "-m", "matscout.mcp_server"]
+    volumes:
+      - matscout-cache:/app/cache
+    stdin_open: true
+    tty: true
+
+volumes:
+  matscout-cache:
