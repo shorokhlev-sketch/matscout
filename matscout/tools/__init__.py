@@ -7,6 +7,7 @@ inside the tools by who's calling — that's the whole architectural point.
 
 from __future__ import annotations
 
+from matscout.tools.get import MaterialNotFoundError, get_material
 from matscout.tools.search import search_materials
 
-__all__ = ["search_materials"]
+__all__ = ["MaterialNotFoundError", "get_material", "search_materials"]

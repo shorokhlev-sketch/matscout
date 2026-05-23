@@ -16,7 +16,7 @@ import pytest
 
 from matscout.cache import Cache
 from matscout.models import Candidate, SearchFilters
-from matscout.tools import search_materials
+from matscout.tools import MaterialNotFoundError, get_material, search_materials
 from matscout.tools._client import set_cache, set_client
 
 # ── tiny fixture machinery — mock MPRester ──────────────────────────────────
@@ -48,6 +48,20 @@ class _FakeDoc:
     is_stable: bool | None = None
     is_metal: bool | None = None
     symmetry: _FakeSymmetry | None = None
+    formula_anonymous: str | None = None
+    chemsys: str | None = None
+    nsites: int | None = None
+    volume: float | None = None
+    density_atomic: float | None = None
+    is_gap_direct: bool | None = None
+    is_magnetic: bool | None = None
+    uncorrected_energy_per_atom: float | None = None
+    bulk_modulus: dict[str, float] | None = None
+    shear_modulus: dict[str, float] | None = None
+    n: float | None = None
+    total_magnetization: float | None = None
+    theoretical: bool = False
+    deprecated: bool = False
 
 
 class _FakeSummary:
@@ -219,3 +233,57 @@ def test_cache_returns_equivalent_candidates() -> None:
     first = search_materials(SearchFilters(elements=["Si"]))
     second = search_materials(SearchFilters(elements=["Si"]))
     assert [c.model_dump() for c in first] == [c.model_dump() for c in second]
+
+
+# ── get_material ────────────────────────────────────────────────────────────
+
+
+def test_get_material_returns_full_sheet() -> None:
+    m = get_material("mp-149")
+    assert m.material_id == "mp-149"
+    assert m.formula_pretty == "Si"
+    assert m.elements == ["Si"]
+    assert m.band_gap == 0.61
+    assert m.symmetry is not None
+    assert m.symmetry.crystal_system.value == "Cubic"
+
+
+def test_get_material_caches() -> None:
+    from matscout.tools._client import get_client
+
+    client = get_client()
+    get_material("mp-149")
+    get_material("mp-149")
+    assert client.materials.summary.call_count == 1  # type: ignore[attr-defined]
+
+
+def test_get_material_raises_when_missing() -> None:
+    set_client(_FakeClient(docs=[]))
+    with pytest.raises(MaterialNotFoundError):
+        get_material("mp-999999")
+
+
+def test_get_material_rejects_empty_id() -> None:
+    with pytest.raises(ValueError):
+        get_material("  ")
+
+
+def test_get_material_normalizes_bulk_modulus_dict() -> None:
+    docs = [
+        _FakeDoc(
+            material_id="mp-1",
+            formula_pretty="X",
+            elements=[_FakeElement("X")],
+            nelements=1,
+            bulk_modulus={"voigt": 120.5, "reuss": 110.0, "vrh": 115.2},
+        )
+    ]
+    set_client(_FakeClient(docs=docs))
+    m = get_material("mp-1")
+    assert m.bulk_modulus == {"voigt": 120.5, "reuss": 110.0, "vrh": 115.2}
+
+
+def test_get_material_handles_missing_bulk_modulus() -> None:
+    m = get_material("mp-149")
+    assert m.bulk_modulus is None
+    assert m.shear_modulus is None
