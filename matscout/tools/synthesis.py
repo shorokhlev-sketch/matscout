@@ -120,11 +120,36 @@ def get_phase_diagram(
         return _hydrate_phase_diagram(cached)
 
     client = get_client()
-    docs = client.materials.summary.search(
-        chemsys=canon,
-        energy_above_hull=(0.0, max_energy_above_hull),
-        fields=_PHASE_FIELDS,
+    docs = list(
+        client.materials.summary.search(
+            chemsys=canon,
+            energy_above_hull=(0.0, max_energy_above_hull),
+            fields=_PHASE_FIELDS,
+        )
     )
+
+    # A phase diagram without its elemental endpoints is geometrically
+    # degenerate — there's nothing for the convex hull to anchor on.
+    # MP rarely surfaces them in a multi-element chemsys query, so we
+    # fetch the stable elemental phase for each element explicitly and
+    # merge it in. Cheap (one tiny query per element, cached).
+    elements_in_chemsys = canon.split("-")
+    if len(elements_in_chemsys) >= 2:
+        seen_mp_ids = {str(getattr(d, "material_id", "")) for d in docs}
+        for el in elements_in_chemsys:
+            el_docs = list(
+                client.materials.summary.search(
+                    chemsys=el,
+                    energy_above_hull=(0.0, 1e-6),  # stable element references only
+                    fields=_PHASE_FIELDS,
+                )
+            )
+            for ed in el_docs:
+                mid = str(getattr(ed, "material_id", ""))
+                if mid and mid not in seen_mp_ids:
+                    docs.append(ed)
+                    seen_mp_ids.add(mid)
+
     candidates = sorted(
         (_doc_to_candidate(d) for d in docs),
         key=lambda c: c.energy_above_hull if c.energy_above_hull is not None else 1e9,

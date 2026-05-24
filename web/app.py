@@ -69,12 +69,36 @@ def _phase_diagram_viz(result: dict[str, Any]) -> dict[str, Any]:
                 pt["composition"] = {el: comp.get(el, 0) / total for el in elements}
             points.append(pt)
 
+    # For the visualisation, collapse polymorphs that share a composition to
+    # a single lowest-energy representative. A binary hull plot draws one
+    # point per composition (the lowest-energy polymorph anchors the hull;
+    # higher polymorphs would just stack on the same x). The full polymorph
+    # list still goes to the LLM via the un-trimmed tool result.
+    if len(elements) == 2:
+        by_comp: dict[tuple[float, ...], dict[str, Any]] = {}
+        for p in points:
+            comp_obj = p.get("composition")
+            fe = p.get("formation_energy_per_atom")
+            if not isinstance(comp_obj, dict) or not isinstance(fe, int | float):
+                continue
+            comp: dict[str, float] = comp_obj
+            key = tuple(round(comp.get(el, 0.0), 6) for el in elements)
+            cur = by_comp.get(key)
+            if cur is None or fe < cur["formation_energy_per_atom"]:
+                by_comp[key] = p
+        viz_points = sorted(
+            by_comp.values(),
+            key=lambda p: p["composition"].get(elements[1], 0.0),
+        )
+    else:
+        viz_points = points
+
     return {
         "chemsys": chemsys_str,
         "elements": elements,
         "n_stable": result.get("n_stable") or 0,
         "n_metastable": result.get("n_metastable") or 0,
-        "points": points,
+        "points": viz_points,
     }
 
 
