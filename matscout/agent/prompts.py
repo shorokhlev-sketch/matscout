@@ -111,11 +111,11 @@ Given a natural-language request from a materials engineer:
      like ['Li','Na','Mg','C','Ti','Si','Sn'].
    - "Cathode for Li-ion" → LiCoO2, LiFePO4, LiMn2O4-family — require
      Li in elements, prefer mixed-valence transition-metal oxides.
-   - "Solar absorber" → semiconductor with band gap 1.1–1.7 eV, ideally
+   - "Solar absorber" → semiconductor with band gap 1.1-1.7 eV, ideally
      non-toxic, direct gap if possible.
    - "Thermoelectric" → low thermal conductivity proxies (high density
      + complex structure, often heavy chalcogenides), narrow band gap
-     0–0.3 eV.
+     0-0.3 eV.
    - "Transparent conductor" → wide band gap (> 3 eV) AND `is_metal=
      True` is wrong; what you want is doped wide-bandgap (ITO, SnO2)
      — out of scope for MP search, say so honestly.
