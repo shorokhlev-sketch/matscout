@@ -152,10 +152,30 @@ class Run:
     # Hold a strong reference to the background task so the event loop
     # doesn't GC it mid-flight (RUF006).
     task: asyncio.Task[None] | None = field(default=None, repr=False)
+    conversation_id: str | None = None
+
+
+@dataclass
+class Conversation:
+    """In-memory store of a multi-turn agent conversation.
+
+    Each turn's full OpenAI message list (system + accumulated user, tool,
+    and assistant messages) is parked here. A follow-up POST /api/query
+    referencing this ``conversation_id`` resumes from these messages so the
+    agent retains context across questions.
+    """
+
+    conversation_id: str
+    messages: list[dict[str, Any]] = field(default_factory=list)
+    locale: str = "en"
+    created_at: float = field(default_factory=time.time)
+    last_used_at: float = field(default_factory=time.time)
 
 
 _runs: dict[str, Run] = {}
+_conversations: dict[str, Conversation] = {}
 _runs_lock = asyncio.Lock()
+CONVERSATION_TTL_SECONDS = 3600  # 1 h — covers a long research session
 
 
 def _event_payload(ev: TraceEvent) -> dict[str, Any]:
@@ -240,7 +260,20 @@ async def _drive_run(run: Run) -> None:
         )
     from matscout.agent.prompts import SYSTEM_PROMPT_V1
 
-    gen = stream_agent(run.query, system_prompt=SYSTEM_PROMPT_V1 + locale_hint)
+    # If this run continues an existing conversation, hand the prior message
+    # list to the runner so context carries over across turns.
+    prior_messages: list[dict[str, Any]] | None = None
+    if run.conversation_id is not None:
+        conv = _conversations.get(run.conversation_id)
+        if conv is not None and conv.messages:
+            prior_messages = conv.messages
+
+    gen = stream_agent(
+        run.query,
+        system_prompt=SYSTEM_PROMPT_V1 + locale_hint,
+        prior_messages=prior_messages,
+    )
+    final_state: list[dict[str, Any]] | None = None
     try:
         while True:
             ev = await loop.run_in_executor(None, next, gen, None)
@@ -251,6 +284,7 @@ async def _drive_run(run: Run) -> None:
             # a recoverable partial trace on disk.
             _persist(run)
             if ev.kind == "final":
+                final_state = ev.state_messages
                 break
     except Exception as e:
         run.events.append({"kind": "tool_error", "error": f"{type(e).__name__}: {e}"})
@@ -258,13 +292,25 @@ async def _drive_run(run: Run) -> None:
         run.error = str(e)
     else:
         run.status = "done"
+        # Bank the post-turn message list against the conversation so the
+        # next /api/query with this conversation_id resumes cleanly.
+        if run.conversation_id is not None and final_state is not None:
+            conv = _conversations.get(run.conversation_id)
+            if conv is not None:
+                conv.messages = final_state
+                conv.last_used_at = time.time()
     finally:
         run.finished_at = time.time()
         _persist(run, include_metadata=True)
 
 
 async def _gc_old_runs() -> None:
-    """Drop runs that finished more than RUN_TTL_SECONDS ago."""
+    """Drop runs that finished more than RUN_TTL_SECONDS ago.
+
+    Also evict conversations whose last use is past CONVERSATION_TTL_SECONDS;
+    these hold the full message list which is the priciest piece of state
+    on the server.
+    """
     now = time.time()
     async with _runs_lock:
         stale = [
@@ -274,6 +320,13 @@ async def _gc_old_runs() -> None:
         ]
         for rid in stale:
             _runs.pop(rid, None)
+        stale_convs = [
+            cid
+            for cid, c in _conversations.items()
+            if now - c.last_used_at > CONVERSATION_TTL_SECONDS
+        ]
+        for cid in stale_convs:
+            _conversations.pop(cid, None)
 
 
 # ── HTTP surface ─────────────────────────────────────────────────────────────
@@ -282,10 +335,15 @@ async def _gc_old_runs() -> None:
 class QueryRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=2000)
     locale: Literal["en", "ru"] = "en"
+    # When set, this turn continues an existing conversation (the runner
+    # picks up the prior message list). When omitted, the server starts a
+    # fresh conversation and returns its id so the client can chain.
+    conversation_id: str | None = Field(default=None, min_length=1, max_length=64)
 
 
 class QueryAccepted(BaseModel):
     request_id: str
+    conversation_id: str
 
 
 class PollResponse(BaseModel):
@@ -306,11 +364,21 @@ async def start_query(req: QueryRequest) -> QueryAccepted:
                 status_code=429,
                 detail=f"Too many concurrent runs ({in_flight}/{MAX_CONCURRENT_RUNS}). Retry shortly.",
             )
+        # Look up or open a conversation. Clients hand back the id we issued;
+        # if it's unknown to us (e.g. server restart), we silently mint a new
+        # one rather than 400 — the cost is just losing prior context, not
+        # rejecting the user's question.
+        cid = req.conversation_id
+        if cid is None or cid not in _conversations:
+            cid = uuid.uuid4().hex[:12]
+            _conversations[cid] = Conversation(conversation_id=cid, locale=req.locale)
+        else:
+            _conversations[cid].last_used_at = time.time()
         rid = uuid.uuid4().hex[:12]
-        run = Run(request_id=rid, query=req.query, locale=req.locale)
+        run = Run(request_id=rid, query=req.query, locale=req.locale, conversation_id=cid)
         _runs[rid] = run
     run.task = asyncio.create_task(_drive_run(run))
-    return QueryAccepted(request_id=rid)
+    return QueryAccepted(request_id=rid, conversation_id=cid)
 
 
 @app.get("/api/query/{request_id}", response_model=PollResponse)

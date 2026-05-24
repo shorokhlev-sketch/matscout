@@ -47,6 +47,11 @@ class TraceEvent:
     error: str | None = None
     content: str | None = None
     turn: int | None = None
+    # On the terminal 'final' event the runner exposes the full OpenAI
+    # message list (system + user + assistant tool_calls + tool results +
+    # assistant final). The web layer captures it so subsequent follow-up
+    # turns in the same conversation can reuse the full context.
+    state_messages: list[dict[str, Any]] | None = None
 
 
 @dataclass
@@ -107,18 +112,29 @@ def stream_agent(
     system_prompt: str = SYSTEM_PROMPT_V1,
     max_turns: int = MAX_TURNS,
     client: OpenAI | None = None,
+    prior_messages: list[dict[str, Any]] | None = None,
 ) -> Iterator[TraceEvent]:
-    """Yield TraceEvents as they happen. End with a 'final' event."""
+    """Yield TraceEvents as they happen. End with a 'final' event.
+
+    When ``prior_messages`` is given (continuing an existing conversation),
+    we append the new user query to that list and skip injecting the
+    system prompt again. The terminal 'final' event carries the updated
+    full message list via ``TraceEvent.state_messages`` so callers can
+    persist it for the next turn.
+    """
     if client is None:
         # Only touch env-backed Settings if we actually need to build a real
         # client — lets unit tests inject a fake without setting MP/OpenAI keys.
         client = OpenAI(api_key=get_settings().openai_api_key)
     tools = tools_to_openai_specs(ALL_TOOLS)
 
-    messages: list[dict[str, Any]] = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": query},
-    ]
+    if prior_messages:
+        messages: list[dict[str, Any]] = [*prior_messages, {"role": "user", "content": query}]
+    else:
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": query},
+        ]
 
     for turn in range(max_turns):
         log.debug("turn %d → openai", turn)
@@ -144,7 +160,10 @@ def stream_agent(
         # No tool calls → final answer.
         if not msg.tool_calls:
             answer = msg.content or ""
-            yield TraceEvent(kind="final", content=answer)
+            # Bake the assistant reply into messages before exporting state
+            # so the next turn sees what was actually said.
+            messages.append({"role": "assistant", "content": answer})
+            yield TraceEvent(kind="final", content=answer, state_messages=messages)
             return
 
         # Record the assistant message verbatim so OpenAI can match tool_call_ids.
@@ -213,4 +232,5 @@ def stream_agent(
             "Partial results above — try a more specific query or fewer "
             "constraints."
         ),
+        state_messages=messages,
     )

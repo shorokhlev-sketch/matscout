@@ -282,6 +282,42 @@ function addEvent(kind, body, opts = {}) {
   return row;
 }
 
+/**
+ * Insert a horizontal divider into the trace and pin the previous
+ * answer above the new one when we're starting a follow-up turn in
+ * the same conversation. The agent's next answer lands in #answer as
+ * usual; we just preserve history so the user can scroll back.
+ */
+function insertTurnDivider(query) {
+  // Move the current answer (if any) into a "previous answer" block that
+  // sits ABOVE the live #answer container — chat-style history.
+  const prevHtml = answerEl.innerHTML;
+  if (prevHtml.trim()) {
+    const archive = document.createElement('section');
+    archive.className = 'prior-answer';
+    archive.innerHTML = prevHtml;
+    answerEl.parentNode.insertBefore(archive, answerEl);
+    answerEl.innerHTML = '';
+    // Re-run mp-id enrichment on the archived block so it keeps its CIF/3D
+    // chips after being detached.
+    enrichInside(archive);
+  }
+  const div = document.createElement('div');
+  div.className = 'turn-divider';
+  div.innerHTML =
+    `<span class="rule"></span>` +
+    `<span class="label">Follow-up</span>` +
+    `<span class="q mono">${escAttr(query)}</span>` +
+    `<span class="rule"></span>`;
+  trace.appendChild(div);
+}
+
+/** Enrich a specific subtree — used for archived prior-turn answers
+ *  so their inline mp-id chips persist after we detach them. */
+function enrichInside(root) {
+  enrichAnswerWithMpLinks(root);
+}
+
 function finalizeEvent(row, durationMs) {
   if (!row) return;
   row.classList.remove('live');
@@ -316,8 +352,15 @@ const POLL_NETWORK_RETRY_MS = 1500;
 const POLL_MAX_NETWORK_RETRIES = 12;  // ~18s of network hiccups tolerated
 
 async function ask(query) {
-  trace.innerHTML = '';
-  answerEl.innerHTML = '';
+  // First turn clears the slate; follow-ups in the same conversation append
+  // a divider and keep prior trace/answer visible so users can re-read what
+  // they already learned.
+  if (window._conversationId) {
+    insertTurnDivider(query);
+  } else {
+    trace.innerHTML = '';
+    answerEl.innerHTML = '';
+  }
   pendingEvent = null;
   hideShareButton();
   setStatus(t('status.starting'), 'live');
@@ -329,7 +372,11 @@ async function ask(query) {
     const resp = await fetch('/api/query', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query, locale: LOCALE }),
+      body: JSON.stringify({
+        query,
+        locale: LOCALE,
+        conversation_id: window._conversationId || null,
+      }),
     });
     if (!resp.ok) {
       const detail = await resp.text();
@@ -338,6 +385,7 @@ async function ask(query) {
     const data = await resp.json();
     requestId = data.request_id;
     window._lastRunId = requestId;
+    if (data.conversation_id) window._conversationId = data.conversation_id;
     setStatus(t('status.polling'), 'live');
   } catch (e) {
     addEvent('tool_error', `${t('startFail')}: ${e.message}`);
@@ -811,6 +859,11 @@ $('#reset').addEventListener('click', () => {
   $('#q').value = '';
   trace.innerHTML = '';
   answerEl.innerHTML = '';
+  // Detach any archived prior-turn answers from the multi-turn buffer.
+  for (const el of document.querySelectorAll('.prior-answer')) el.remove();
+  // End the conversation: the next ask() will mint a fresh one.
+  window._conversationId = null;
+  hideShareButton();
   setStatus('');
 });
 
@@ -849,8 +902,8 @@ function hideShareButton() {
  * canonical Materials Project page. Skips text already inside <a> tags
  * (so we don't double-wrap when re-running enrichment).
  */
-function enrichAnswerWithMpLinks() {
-  const root = $('#answer');
+function enrichAnswerWithMpLinks(root) {
+  root = root || $('#answer');
   if (!root) return;
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
   const nodes = [];

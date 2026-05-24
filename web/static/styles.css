@@ -610,3 +610,58 @@ footer {
   letter-spacing: 0.02em;
 }
 footer a { color: var(--fg-2); text-decoration: none; border-bottom: 1px dashed var(--border-hi); }
+
+/* ── follow-up turns in the same conversation ───────────────────────────── */
+.turn-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 18px 0 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--fg-3);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.turn-divider .rule {
+  flex: 1 1 auto;
+  height: 1px;
+  background: linear-gradient(to right, transparent, var(--border-hi), transparent);
+}
+.turn-divider .label {
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--acc-soft);
+  color: var(--acc);
+  letter-spacing: 0.08em;
+}
+.turn-divider .q {
+  color: var(--fg-2);
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 12px;
+  max-width: 60ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prior-answer {
+  margin: 0 0 18px;
+  padding: 12px 14px 4px;
+  border-left: 2px solid var(--border);
+  background: rgba(255, 255, 255, 0.014);
+  color: var(--fg-2);
+  position: relative;
+}
+.prior-answer::before {
+  content: 'Previous turn';
+  display: block;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--fg-3);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
