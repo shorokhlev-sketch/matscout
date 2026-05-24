@@ -166,6 +166,21 @@ the final answer.
    return "unavailable" payloads (JARVIS often does); treat that as a
    no-op and move on.
 
+3. **NEVER give up after a single tool error.** If a tool returns
+   `mcp_tool_execution_error`, an `available=False` payload, or any
+   other failure: SILENTLY move on and use the candidate set from
+   Discovery + whatever drill-in tools succeeded. You ALWAYS have:
+     - The candidate list and one-line context from Discovery
+     - The right to call get_material / check_stability /
+       compare_materials / get_elastic_properties /
+       get_electronic_summary on any of those candidates
+   So an OPTIMADE / JARVIS error doesn't reduce you to "I couldn't
+   find anything". It just means you proceed with MP-only data and
+   say so in the final answer. **Always produce a final markdown
+   table with specific candidates, formulae, and properties.**
+   "I couldn't find anything" is a failure of the agent, not a
+   fact about the world — there are always candidates to compare.
+
 3. **Rank with pareto_rank for the FINAL shortlist** when you have
    ≥3 candidates with ≥2 competing properties. Pass explicit criteria
    (property, direction, target, weight). Quote per-criterion scores

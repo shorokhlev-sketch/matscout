@@ -22,7 +22,7 @@ Filter syntax is OPTIMADE's filter language, e.g.
 
 from __future__ import annotations
 
-import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import httpx
@@ -64,26 +64,25 @@ _USER_AGENT = "matscout/0.1 (+https://matscout.prfo.design)"
 _HTTP_TIMEOUT = 12.0
 
 
-async def _query_one(
-    client: httpx.AsyncClient,
+def _query_one(
     provider_id: str,
     base_url: str,
     optimade_filter: str,
     page_limit: int,
 ) -> dict[str, Any]:
-    """Issue one OPTIMADE query against a single provider, gracefully."""
-    url = (
-        f"{base_url}/structures"
-        f"?filter={httpx.URL.__new__(httpx.URL)._uri_reference.encode if False else ''}"
-        f"{optimade_filter}&page_limit={page_limit}"
-    )
-    # Manual URL build because httpx eagerly encodes spaces inside `filter`
-    # in a way some providers reject. Keep it simple — encode commas /
-    # operators per OPTIMADE spec.
+    """Issue one OPTIMADE query against a single provider, gracefully.
+
+    Sync httpx (not async) because matscout is invoked from inside MCP's
+    session-manager event loop, where ``asyncio.run`` blows up. Parallel
+    fan-out happens at the caller via ``ThreadPoolExecutor``.
+    """
+    # OPTIMADE spec lets us encode the filter with %20 + %22 escapes —
+    # safer than httpx's default URL composition for filter operators.
     safe_filter = optimade_filter.replace(" ", "%20").replace('"', "%22")
     url = f"{base_url}/structures?filter={safe_filter}&page_limit={page_limit}"
     try:
-        resp = await client.get(url, headers={"User-Agent": _USER_AGENT})
+        with httpx.Client(timeout=_HTTP_TIMEOUT, follow_redirects=True) as c:
+            resp = c.get(url, headers={"User-Agent": _USER_AGENT})
     except (httpx.HTTPError, OSError) as e:
         return {
             "provider": provider_id,
@@ -192,21 +191,20 @@ def optimade_search(
     if cached is not None:
         return cached
 
-    async def run_all() -> list[dict[str, Any]]:
-        async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT, follow_redirects=True) as client:
-            tasks = [
-                _query_one(
-                    client,
-                    pid,
-                    _PROVIDERS[pid][1],
-                    optimade_filter,
-                    page_limit,
-                )
-                for pid in chosen
-            ]
-            return await asyncio.gather(*tasks)
-
-    results = asyncio.run(run_all())
+    # Sync fan-out via threads. We're called from inside an already-
+    # running event loop (MCP session_manager.run() context), so
+    # asyncio.run / asyncio.gather here would error out. Threads are
+    # the safest cross-context primitive — each HTTP call holds the
+    # GIL only briefly, the long wait is network I/O which releases it.
+    with ThreadPoolExecutor(max_workers=min(len(chosen), 6)) as pool:
+        results = list(
+            pool.map(
+                lambda pid: _query_one(
+                    pid, _PROVIDERS[pid][1], optimade_filter, page_limit
+                ),
+                chosen,
+            )
+        )
 
     by_provider: dict[str, dict[str, Any]] = {}
     total_hits = 0
