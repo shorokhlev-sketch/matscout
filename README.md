@@ -127,6 +127,29 @@ uv run ruff check matscout web
   the agent loop doesn't hard-code "relax / tighten" branches — the system prompt teaches
   gpt-4o how to handle those conditions. Lets us claim "agentic" honestly.
 
+## Security posture (read me)
+
+The MCP endpoint at `/mcp/http/` is **publicly callable, no auth**. By
+design — OpenAI's Responses API and any remote-mode Claude Desktop hit it
+without bearer tokens. That means anyone on the internet who finds the URL
+can call the 10 tools and consume our Materials Project API quota.
+
+Mitigations in place:
+
+- **DNS-rebinding guard** via FastMCP's `TransportSecuritySettings` — only
+  requests with `Host: matscout.prfo.design` (or localhost in dev) pass.
+- **Per-IP rate limit at nginx** — 30 req/min, burst 10. Defeats casual
+  scrapers; legitimate Responses-API + Claude Desktop usage stays well
+  under it.
+- **Tools are read-only** — they query MP, CrossRef, arXiv. No state
+  mutation, no shell-out, no eval. The blast radius of abuse is quota
+  burn, not compromise.
+
+For a production deployment you'd add a shared-secret header (the
+Responses API MCP tool config supports custom headers) and put nginx
+proxy_request_body limits in front. For a portfolio piece the current
+posture is honest enough.
+
 ## Attribution
 
 Data from [Materials Project](https://next-gen.materialsproject.org/), licensed

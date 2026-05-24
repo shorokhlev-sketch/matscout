@@ -229,95 +229,84 @@ def extract_material_ids(snapshot: dict[str, Any]) -> list[str]:
 def reconstruct_messages_from_snapshot(
     snapshot: dict[str, Any], system_prompt: str
 ) -> list[dict[str, Any]]:
-    """Rebuild an OpenAI message list from a saved snapshot's events.
+    """Rebuild a plain-text conversation history from a saved snapshot.
 
     Used when a visitor lands on a /r/{id} snapshot URL and wants to ask a
-    follow-up — we restore the conversation context server-side so the
-    agent picks up where the original run left off.
+    follow-up. The Responses API path runs MCP server-side and doesn't
+    accept chat.completions-shaped tool exchanges in its ``input`` list,
+    so we serialize the original tool sequence into one synthetic
+    assistant text block — preserves recall of what was called and what
+    came back, in a form the agent can actually read.
 
-    Snapshot events store ``result_summary`` rather than the full tool
-    payload, so the assistant's tool messages here carry a compact
-    descriptor ``{"tool": name, "args": …, "summary": …}``. That's enough
-    for the agent to know *what* was previously asked of which tool — if
-    it needs precise values for its follow-up reasoning, it can simply
-    call the tool again, and the SQLite cache will hand back the same
-    result for free.
+    Output shape:
+        [
+            {role: 'system',    content: SYSTEM_PROMPT},
+            {role: 'user',      content: original_query},
+            {role: 'assistant', content: "Earlier in this session I…"},
+        ]
 
-    Tool-call IDs from the original OpenAI exchange are gone (we don't
-    persist them), so we mint placeholder IDs here. OpenAI only requires
-    them to be unique within the conversation and matched between an
-    assistant ``tool_calls[i].id`` and the subsequent ``tool`` message.
+    The synthetic assistant block reads like a memo from past-self —
+    listing each tool name + (compact) args + summary line, plus the
+    original final answer. If the follow-up question needs precise
+    values, the agent can simply re-call the tool: the SQLite cache will
+    hand back the same result for free.
     """
-    msgs: list[dict[str, Any]] = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": snapshot.get("query", "")},
-    ]
+    query = snapshot.get("query", "")
     events: list[dict[str, Any]] = snapshot.get("events") or []
 
-    # Build a tool_call ↔ result correspondence per "turn". A turn is
-    # bounded by `thinking` markers or the final assistant message.
-    counter = 0
-    pending_calls: list[dict[str, Any]] = []
-    pending_results: list[dict[str, Any]] = []
+    # Walk the trace and build a single assistant memo describing what
+    # past-self did. Tool calls are paired with their results by
+    # position (output_index alignment is lost in the snapshot, but the
+    # trace order matches), errors get the same treatment as results.
+    memo_parts: list[str] = [
+        "Earlier in this same research session you (the agent) executed the "
+        "tool calls below and produced the final answer at the end. The user "
+        "is now asking a follow-up — assume the user has seen everything below."
+    ]
 
-    def flush() -> None:
+    pending_calls: list[tuple[str, dict[str, Any]]] = []
+    pending_results: list[tuple[str, str]] = []  # (summary, error)
+    final_answer = ""
+
+    def flush_turn() -> None:
         nonlocal pending_calls, pending_results
-        if pending_calls:
-            msgs.append(
-                {
-                    "role": "assistant",
-                    "content": "",
-                    "tool_calls": pending_calls,
-                }
+        for (name, args), (summary, error) in zip(pending_calls, pending_results, strict=False):
+            args_str = (
+                ", ".join(f"{k}={v!r}" for k, v in (args or {}).items() if v is not None)
+                or "(no args)"
             )
-            msgs.extend(pending_results)
+            if error:
+                memo_parts.append(f"  - {name}({args_str}) → ERROR: {error[:120]}")
+            else:
+                memo_parts.append(f"  - {name}({args_str}) → {summary[:200]}")
         pending_calls = []
         pending_results = []
 
     for ev in events:
         kind = ev.get("kind")
         if kind == "tool_call":
-            counter += 1
-            tc_id = f"call_recon_{counter:04d}"
-            pending_calls.append(
-                {
-                    "id": tc_id,
-                    "type": "function",
-                    "function": {
-                        "name": ev.get("name", ""),
-                        "arguments": json.dumps(ev.get("args") or {}),
-                    },
-                }
-            )
-        elif kind in {"tool_result", "tool_error"}:
-            idx = len(pending_results)
-            if idx >= len(pending_calls):
-                # Orphan result — skip to keep the list valid for OpenAI.
-                continue
-            descriptor: dict[str, Any] = {
-                "tool": pending_calls[idx]["function"]["name"],
-                "args": ev.get("args") or {},
-                "summary": ev.get("result_summary") or "(no summary stored)",
-            }
-            if kind == "tool_error":
-                descriptor["error"] = ev.get("error", "")
-            pending_results.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": pending_calls[idx]["id"],
-                    "content": json.dumps(descriptor),
-                }
-            )
+            pending_calls.append((ev.get("name", ""), ev.get("args") or {}))
+        elif kind == "tool_result":
+            pending_results.append((ev.get("result_summary") or "(ok)", ""))
+        elif kind == "tool_error":
+            pending_results.append(("", ev.get("error", "tool failed")))
         elif kind == "thinking":
-            flush()
+            flush_turn()
         elif kind == "final":
-            flush()
-            msgs.append({"role": "assistant", "content": ev.get("content") or ""})
+            flush_turn()
+            final_answer = ev.get("content") or ""
 
-    # If the run was interrupted before a `final` event, still flush any
-    # remaining tool exchanges so the message list stays well-formed.
-    flush()
-    return msgs
+    flush_turn()
+    if final_answer:
+        memo_parts.append("")
+        memo_parts.append("Your final answer to the user was:")
+        memo_parts.append(final_answer)
+
+    return [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": query},
+        {"role": "assistant", "content": "\n".join(memo_parts)},
+    ]
 
 
 def _ts_to_iso(ts: int | float | None) -> str:

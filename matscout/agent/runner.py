@@ -59,9 +59,6 @@ class TraceEvent:
     # back ourselves. The terminal 'final' event surfaces the just-issued
     # response_id so the web layer can park it against the conversation.
     response_id: str | None = None
-    # Kept for backwards compatibility with the old runner / snapshot
-    # resume code — populated only when reconstructing from a snapshot.
-    state_messages: list[dict[str, Any]] | None = None
 
 
 @dataclass

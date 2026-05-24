@@ -40,16 +40,17 @@ _ALLOWED_HOSTS = [
     "localhost:8011",
     "localhost:8090",
     "matscout.prfo.design",
-    "matscout.prfo.design:443",
 ]
 
+# Origin header is only ever sent by browser-initiated XHR. The
+# server-to-server callers we care about (OpenAI Responses API egress,
+# Claude Desktop remote MCP) omit it, and the guard passes None
+# trivially. We allow our own playground origin in case a browser ever
+# needs to talk to /mcp/ directly during local dev.
 _ALLOWED_ORIGINS = [
-    "http://127.0.0.1",
     "http://127.0.0.1:8090",
-    "http://localhost",
     "http://localhost:8090",
     "https://matscout.prfo.design",
-    "https://platform.openai.com",
 ]
 
 mcp = FastMCP(

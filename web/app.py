@@ -242,6 +242,10 @@ class Conversation:
     locale: str = "en"
     created_at: float = field(default_factory=time.time)
     last_used_at: float = field(default_factory=time.time)
+    # Set while a /api/query turn for this conversation is in flight, so
+    # two near-simultaneous follow-ups don't race on last_response_id
+    # (OpenAI rejects parallel uses of the same previous_response_id).
+    in_flight: bool = False
 
 
 _runs: dict[str, Run] = {}
@@ -380,6 +384,15 @@ async def _drive_run(run: Run) -> None:
         run.events.append({"kind": "tool_error", "error": f"{type(e).__name__}: {e}"})
         run.status = "error"
         run.error = str(e)
+        # Self-heal the conversation: OpenAI rejecting a stale
+        # previous_response_id (retention expired, parallel-use, etc.)
+        # comes back here. If we leave last_response_id in place every
+        # follow-up will hit the same dead id forever. Drop it so the
+        # next turn starts fresh.
+        if run.conversation_id is not None:
+            conv = _conversations.get(run.conversation_id)
+            if conv is not None and conv.last_response_id is not None:
+                conv.last_response_id = None
     else:
         run.status = "done"
         # Park the response_id against the conversation so the next
@@ -396,6 +409,11 @@ async def _drive_run(run: Run) -> None:
                 conv.messages = []
                 conv.last_used_at = time.time()
     finally:
+        # Always release the conversation slot so a retry can come in.
+        if run.conversation_id is not None:
+            conv = _conversations.get(run.conversation_id)
+            if conv is not None:
+                conv.in_flight = False
         run.finished_at = time.time()
         _persist(run, include_metadata=True)
 
@@ -469,7 +487,22 @@ async def start_query(req: QueryRequest) -> QueryAccepted:
             cid = uuid.uuid4().hex[:12]
             _conversations[cid] = Conversation(conversation_id=cid, locale=req.locale)
         else:
-            _conversations[cid].last_used_at = time.time()
+            conv = _conversations[cid]
+            # Reject if a turn for this conversation is already in flight —
+            # OpenAI rejects parallel uses of the same previous_response_id,
+            # and even without that, racing turns interleave the
+            # last_response_id update non-deterministically. 429 lets the
+            # client back off.
+            if conv.in_flight:
+                raise HTTPException(
+                    status_code=429,
+                    detail=(
+                        "A turn for this conversation is already running. "
+                        "Wait for it to finish before sending a follow-up."
+                    ),
+                )
+            conv.last_used_at = time.time()
+        _conversations[cid].in_flight = True
         rid = uuid.uuid4().hex[:12]
         run = Run(request_id=rid, query=req.query, locale=req.locale, conversation_id=cid)
         _runs[rid] = run
