@@ -56,38 +56,45 @@ def find_battery_anode(
     Returns:
         ``list[Candidate]`` ranked by ``energy_above_hull``.
     """
-    # Hand-picked element sets per chemistry — these are the elements
-    # that actually appear in published electrode materials. Working
-    # ion always included (the agent will see "Li in elements"); host
-    # elements are the framework atoms the working ion shuttles between.
-    host_elements = {
-        "lithium": ["Li", "C", "Si", "Sn", "Ti", "Sb", "Ge", "Al", "O"],
-        "sodium": ["Na", "C", "Sn", "Ti", "Sb", "Ge", "P", "O"],
-        "magnesium": ["Mg", "Mo", "S", "Se", "O", "Ti"],
-        "potassium": ["K", "C", "Sn", "Sb", "Bi", "O"],
-    }[chemistry]
-
-    filters = SearchFilters(
-        elements=host_elements,
-        exclude_elements=["U", "Th", "Pa", "Np", "Pu", "Am", "Cm"],  # radioactives
-        max_energy_above_hull=0.05,
-        num_elements=(1, 4),
-        limit=limit * 4,  # over-fetch, then post-filter
-    )
-    results = search_materials(filters=filters)
-
-    # Post-filter: must contain the working ion OR be a known anode
-    # host (graphite, Si, Sn, etc.). Drops candidates that match an
-    # element from the union but aren't actually anodes.
+    # MP's `elements` filter is conjunctive ("must contain ALL"), so
+    # we can't OR over an element shortlist in one call. Run two
+    # complementary searches and merge: (a) materials containing the
+    # working ion, plus (b) pure-element anodes (graphite, Si, Sn…).
     working_ion = {"lithium": "Li", "sodium": "Na", "magnesium": "Mg", "potassium": "K"}[chemistry]
-    known_hosts = {"C", "Si", "Sn", "Sb", "Ge", "Ti", "Mo"}
-    kept = [
-        c
-        for c in results
-        if working_ion in (c.elements or [])
-        or (c.nelements == 1 and (c.elements or [""])[0] in known_hosts)
-    ]
-    return kept[:limit]
+    pure_hosts = {
+        "lithium": ["C", "Si", "Sn", "Ge", "Sb"],
+        "sodium": ["C", "Sn", "Sb"],
+        "magnesium": ["Mg"],
+        "potassium": ["C"],
+    }[chemistry]
+    radioactive_exclude = ["U", "Th", "Pa", "Np", "Pu", "Am", "Cm"]
+
+    ion_filters = SearchFilters(
+        elements=[working_ion],
+        exclude_elements=radioactive_exclude,
+        max_energy_above_hull=0.05,
+        num_elements=(2, 4),
+        limit=limit * 4,
+    )
+    results: list[Candidate] = list(search_materials(filters=ion_filters))
+
+    # Pure-element anodes (stable ground state only).
+    for host in pure_hosts:
+        pure_filters = SearchFilters(
+            formula=host,
+            only_stable=True,
+            num_elements=1,
+            limit=2,
+        )
+        results.extend(search_materials(filters=pure_filters))
+
+    # De-duplicate by material_id, preserve insertion order, then rank.
+    seen: dict[str, Candidate] = {}
+    for c in results:
+        if c.material_id not in seen:
+            seen[c.material_id] = c
+    ranked = sorted(seen.values(), key=lambda c: c.energy_above_hull or 1e9)
+    return ranked[:limit]
 
 
 def find_battery_cathode(
@@ -106,23 +113,36 @@ def find_battery_cathode(
     transition_metals = ["Co", "Ni", "Mn", "Fe", "V", "Cr", "Cu", "Ti"]
     working_ion = {"lithium": "Li", "sodium": "Na"}[chemistry]
 
-    filters = SearchFilters(
-        elements=[working_ion, *transition_metals, "O", "P", "S", "F"],
-        exclude_elements=["U", "Th", "Pa", "Np", "Pu"],
-        max_energy_above_hull=0.03,
-        num_elements=(3, 5),  # cathodes are at minimum ternary (Li-TM-O)
-        limit=limit * 3,
-    )
-    results = search_materials(filters=filters)
+    # MP elements filter is conjunctive — one search per TM, then merge.
+    # Each search asks "must contain Li AND <TM> AND O" which catches
+    # the real cathode chemistry (Li-Co-O, Li-Ni-O, Li-Mn-O, …).
+    results: list[Candidate] = []
+    for tm in transition_metals:
+        filters = SearchFilters(
+            elements=[working_ion, tm, "O"],
+            exclude_elements=["U", "Th", "Pa", "Np", "Pu"],
+            max_energy_above_hull=0.03,
+            num_elements=(3, 5),
+            limit=5,
+        )
+        results.extend(search_materials(filters=filters))
+    # Also LiFePO4-class phosphates / fluorides
+    for anion in ("P", "F", "S"):
+        filters = SearchFilters(
+            elements=[working_ion, "Fe", anion, "O"],
+            exclude_elements=["U", "Th", "Pa", "Np", "Pu"],
+            max_energy_above_hull=0.03,
+            num_elements=(3, 5),
+            limit=3,
+        )
+        results.extend(search_materials(filters=filters))
 
-    # Must contain working ion AND at least one transition metal.
-    kept = [
-        c
-        for c in results
-        if working_ion in (c.elements or [])
-        and any(tm in (c.elements or []) for tm in transition_metals)
-    ]
-    return kept[:limit]
+    seen: dict[str, Candidate] = {}
+    for c in results:
+        if c.material_id not in seen:
+            seen[c.material_id] = c
+    ranked = sorted(seen.values(), key=lambda c: c.energy_above_hull or 1e9)
+    return ranked[:limit]
 
 
 def find_solar_absorber(
@@ -174,17 +194,27 @@ def find_thermoelectric(
         "very-narrow": (0.0, 0.1),
         "narrow": (0.0, 0.3),
     }[target_gap]
-    filters = SearchFilters(
-        band_gap_range=bg,
-        density_range=(5.0, 15.0),  # heavy-element bias
-        only_stable=True,
-        # Bias toward chalcogenides and heavy pnictides — the proven
-        # thermoelectric chemistries (Bi-Te, Pb-Te, Sb-Te, Ag-Sb-Te, …).
-        elements=["S", "Se", "Te", "Sb", "Bi", "Pb", "Sn", "Ag", "Cu"],
-        num_elements=(2, 5),
-        limit=limit * 2,
-    )
-    return search_materials(filters=filters)[:limit]
+    # MP elements is conjunctive — run one search per heavy chalcogen
+    # / pnictide and merge. Catches the proven thermoelectric families:
+    # Bi-Te, Pb-Te, Sb-Te, Ag-Sb-Te, etc.
+    chalc_families = ["Te", "Se", "S", "Sb", "Bi"]
+    results: list[Candidate] = []
+    for x in chalc_families:
+        filters = SearchFilters(
+            band_gap_range=bg,
+            density_range=(5.0, 15.0),
+            only_stable=True,
+            elements=[x],
+            num_elements=(2, 4),
+            limit=10,
+        )
+        results.extend(search_materials(filters=filters))
+    seen: dict[str, Candidate] = {}
+    for c in results:
+        if c.material_id not in seen:
+            seen[c.material_id] = c
+    ranked = sorted(seen.values(), key=lambda c: c.density or 0, reverse=True)
+    return ranked[:limit]
 
 
 def find_transparent_conductor(
@@ -201,12 +231,25 @@ def find_transparent_conductor(
     Args:
         limit: max candidates.
     """
-    filters = SearchFilters(
-        elements=["O", "In", "Sn", "Zn", "Cd", "Ga", "Al", "Mg", "Si"],
-        band_gap_range=(3.0, 6.0),
-        only_stable=True,
-        is_metal=False,
-        num_elements=(2, 4),
-        limit=limit * 2,
-    )
-    return search_materials(filters=filters)[:limit]
+    # Same conjunctive-elements caveat. Search per common TCO-parent
+    # element (In, Sn, Zn, Ga, Al) constrained to oxides.
+    parent_metals = ["In", "Sn", "Zn", "Ga", "Al"]
+    results: list[Candidate] = []
+    for m in parent_metals:
+        filters = SearchFilters(
+            elements=[m, "O"],
+            band_gap_range=(3.0, 6.0),
+            only_stable=True,
+            is_metal=False,
+            num_elements=(2, 4),
+            limit=5,
+        )
+        results.extend(search_materials(filters=filters))
+    seen: dict[str, Candidate] = {}
+    for c in results:
+        if c.material_id not in seen:
+            seen[c.material_id] = c
+    ranked = sorted(seen.values(), key=lambda c: c.energy_above_hull or 1e9)
+    return ranked[:limit]
+
+
