@@ -130,69 +130,82 @@ function stopTimer() {
   $('#elapsed').classList.remove('live');
 }
 
+const POLL_INTERVAL_MS = 500;
+const POLL_NETWORK_RETRY_MS = 1500;
+const POLL_MAX_NETWORK_RETRIES = 12;  // ~18s of network hiccups tolerated
+
 async function ask(query) {
   trace.innerHTML = '';
   answerEl.innerHTML = '';
   pendingEvent = null;
-  setStatus('Opening connection to /api/query…', 'live');
+  setStatus('Starting agent…', 'live');
   startTimer();
   runBtn.disabled = true;
 
-  let buffer = '';
-  let eventName = 'message';
-
+  let requestId = null;
   try {
     const resp = await fetch('/api/query', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query }),
     });
-    if (!resp.ok || !resp.body) {
-      const text = await resp.text();
-      addEvent('tool_error', `HTTP ${resp.status}: ${text}`);
-      setStatus('Error', '');
-      stopTimer();
-      runBtn.disabled = false;
-      return;
+    if (!resp.ok) {
+      const detail = await resp.text();
+      throw new Error(`HTTP ${resp.status}: ${detail}`);
     }
-    setStatus('Connected, streaming…', 'live');
-
-    const reader = resp.body.getReader();
-    const decoder = new TextDecoder();
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-
-      let idx;
-      while ((idx = buffer.indexOf('\n\n')) !== -1) {
-        const raw = buffer.slice(0, idx);
-        buffer = buffer.slice(idx + 2);
-        const lines = raw.split('\n');
-        let dataLine = '';
-        for (const ln of lines) {
-          if (ln.startsWith('event:')) eventName = ln.slice(6).trim();
-          else if (ln.startsWith('data:')) dataLine += ln.slice(5).trim();
-        }
-        if (!dataLine) continue;
-        let payload;
-        try { payload = JSON.parse(dataLine); } catch { continue; }
-        handleEvent(eventName, payload);
-      }
-    }
+    const data = await resp.json();
+    requestId = data.request_id;
+    setStatus(`Polling /api/query/${requestId.slice(0, 6)}…`, 'live');
   } catch (e) {
-    addEvent('tool_error',
-      `Connection dropped during streaming — likely a network blip ` +
-      `(your ISP / a corporate firewall closing long-lived HTTPS streams). ` +
-      `<b>Press <i>Ask matscout</i> again</b>: the SQLite tool-result cache will skip ` +
-      `the previously completed tool calls, so the second run is usually much faster. ` +
-      `<span class="detail">(${e.message})</span>`
-    );
-    setStatus('Connection error · try again', '');
-  } finally {
+    addEvent('tool_error', `Failed to start run: ${e.message}`);
+    setStatus('Error', '');
     runBtn.disabled = false;
     stopTimer();
+    return;
   }
+
+  let since = 0;
+  let networkErrors = 0;
+
+  while (true) {
+    let payload;
+    try {
+      const r = await fetch(`/api/query/${requestId}?since=${since}`, {
+        cache: 'no-store',
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      payload = await r.json();
+      networkErrors = 0;
+    } catch (e) {
+      networkErrors += 1;
+      setStatus(`Network hiccup (${networkErrors}/${POLL_MAX_NETWORK_RETRIES})…`, 'live');
+      if (networkErrors >= POLL_MAX_NETWORK_RETRIES) {
+        addEvent('tool_error',
+          `Repeated network errors while polling. The agent run keeps going on ` +
+          `the server — wait a few seconds and press <b>Ask matscout</b> again; ` +
+          `the SQLite cache will skip already-completed tool calls. ` +
+          `<span class="detail">(${e.message})</span>`
+        );
+        setStatus('Connection error · try again', '');
+        break;
+      }
+      await sleep(POLL_NETWORK_RETRY_MS);
+      continue;
+    }
+
+    for (const ev of payload.events) handleEvent(ev.kind, ev);
+    since = payload.total_events;
+
+    if (payload.status !== 'running') break;
+    await sleep(POLL_INTERVAL_MS);
+  }
+
+  runBtn.disabled = false;
+  stopTimer();
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 function fmtArgs(args) {

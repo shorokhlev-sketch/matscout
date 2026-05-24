@@ -1,9 +1,14 @@
-"""FastAPI playground for matscout — single-page chat over SSE.
+"""FastAPI playground for matscout — polling-based agent runner.
 
-POST a JSON ``{"query": "..."}`` to ``/api/query``. The server runs the
-agent loop and streams events as they happen (``tool_call``,
-``tool_result``, ``tool_error``, ``final``). The browser renders them
-live, so you see the agent "think" instead of staring at a spinner.
+Originally this used SSE, but Russian-ISP DPI kept ripping long-lived
+``text/event-stream`` connections regardless of heartbeat frequency.
+Switched to a poll-friendly request-id pattern:
+
+  POST /api/query              -> {"request_id": "..."}            (instant)
+  GET  /api/query/{id}?since=N -> {"events": [...], "status": ...}  (short, repeatable)
+
+Each poll is a short HTTPS round-trip — DPI sees the same pattern as a
+normal REST API and leaves it alone. Browser polls every 500 ms.
 
 Run:
     uv run uvicorn web.app:app --reload --port 8000
@@ -12,20 +17,22 @@ Run:
 from __future__ import annotations
 
 import asyncio
-import json
-from collections.abc import AsyncIterator
+import time
+import uuid
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-from sse_starlette.sse import EventSourceResponse
 
 from matscout.agent.runner import TraceEvent, stream_agent
 
 STATIC_DIR = Path(__file__).parent / "static"
+RUN_TTL_SECONDS = 600  # how long we keep a finished run around for late pollers
+MAX_CONCURRENT_RUNS = 8
 
 app = FastAPI(
     title="matscout",
@@ -34,12 +41,31 @@ app = FastAPI(
 )
 
 
-class QueryRequest(BaseModel):
-    query: str = Field(..., min_length=1, max_length=2000)
+# ── In-memory run registry ──────────────────────────────────────────────────
+# This is intentionally a single-process dict — one uvicorn worker, low
+# concurrency. If we ever scale out we'd put this in Redis, but the cost of
+# that abstraction now isn't worth it.
+
+Status = Literal["running", "done", "error"]
+
+
+@dataclass
+class Run:
+    request_id: str
+    query: str
+    events: list[dict[str, Any]] = field(default_factory=list)
+    status: Status = "running"
+    error: str | None = None
+    started_at: float = field(default_factory=time.time)
+    finished_at: float | None = None
+
+
+_runs: dict[str, Run] = {}
+_runs_lock = asyncio.Lock()
 
 
 def _event_payload(ev: TraceEvent) -> dict[str, Any]:
-    """Strip the trace event down to what the browser actually needs."""
+    """Strip a TraceEvent down to what the browser actually needs."""
     payload: dict[str, Any] = {"kind": ev.kind}
     if ev.name is not None:
         payload["name"] = ev.name
@@ -52,8 +78,6 @@ def _event_payload(ev: TraceEvent) -> dict[str, Any]:
     if ev.turn is not None:
         payload["turn"] = ev.turn
     if ev.result is not None:
-        # Keep the payload compact — full result already drives the
-        # final answer; here we just show a short preview/length.
         if isinstance(ev.result, list):
             preview: list[str] = []
             for item in ev.result[:3]:
@@ -81,37 +105,88 @@ def _event_payload(ev: TraceEvent) -> dict[str, Any]:
     return payload
 
 
-async def _stream(query: str) -> AsyncIterator[dict[str, Any]]:
-    """Bridge sync agent generator → async SSE generator."""
+async def _drive_run(run: Run) -> None:
+    """Background coroutine — runs the agent and pumps events into ``run.events``."""
     loop = asyncio.get_running_loop()
-    gen = stream_agent(query)
-
-    while True:
-        try:
+    gen = stream_agent(run.query)
+    try:
+        while True:
             ev = await loop.run_in_executor(None, next, gen, None)
-        except StopIteration:
-            break
-        if ev is None:
-            break
-        yield {"event": ev.kind, "data": json.dumps(_event_payload(ev), ensure_ascii=False)}
-        if ev.kind == "final":
-            break
+            if ev is None:
+                break
+            run.events.append(_event_payload(ev))
+            if ev.kind == "final":
+                break
+    except Exception as e:
+        run.events.append({"kind": "tool_error", "error": f"{type(e).__name__}: {e}"})
+        run.status = "error"
+        run.error = str(e)
+    else:
+        run.status = "done"
+    finally:
+        run.finished_at = time.time()
 
 
-@app.post("/api/query")
-async def query(req: QueryRequest) -> EventSourceResponse:
-    return EventSourceResponse(
-        _stream(req.query),
-        # SSE-starlette emits a `: ping` comment-line every 15s — keeps the
-        # TCP socket warm against DPI / proxy idle-timeouts (we've seen RU
-        # provider DPI drop streams that go silent > ~60s while gpt-4o is
-        # composing the final answer).
-        ping=15,
-        headers={
-            # Tell nginx and any upstream proxies not to buffer this response.
-            "X-Accel-Buffering": "no",
-            "Cache-Control": "no-cache, no-transform",
-        },
+async def _gc_old_runs() -> None:
+    """Drop runs that finished more than RUN_TTL_SECONDS ago."""
+    now = time.time()
+    async with _runs_lock:
+        stale = [
+            rid
+            for rid, r in _runs.items()
+            if r.finished_at is not None and now - r.finished_at > RUN_TTL_SECONDS
+        ]
+        for rid in stale:
+            _runs.pop(rid, None)
+
+
+# ── HTTP surface ─────────────────────────────────────────────────────────────
+
+
+class QueryRequest(BaseModel):
+    query: str = Field(..., min_length=1, max_length=2000)
+
+
+class QueryAccepted(BaseModel):
+    request_id: str
+
+
+class PollResponse(BaseModel):
+    request_id: str
+    status: Status
+    total_events: int
+    events: list[dict[str, Any]]
+
+
+@app.post("/api/query", response_model=QueryAccepted)
+async def start_query(req: QueryRequest) -> QueryAccepted:
+    """Kick off an agent run; returns immediately with a request_id to poll."""
+    await _gc_old_runs()
+    async with _runs_lock:
+        in_flight = sum(1 for r in _runs.values() if r.status == "running")
+        if in_flight >= MAX_CONCURRENT_RUNS:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Too many concurrent runs ({in_flight}/{MAX_CONCURRENT_RUNS}). Retry shortly.",
+            )
+        rid = uuid.uuid4().hex[:12]
+        run = Run(request_id=rid, query=req.query)
+        _runs[rid] = run
+    asyncio.create_task(_drive_run(run))
+    return QueryAccepted(request_id=rid)
+
+
+@app.get("/api/query/{request_id}", response_model=PollResponse)
+async def poll_query(request_id: str, since: int = 0) -> PollResponse:
+    """Return all events recorded since index ``since`` for this run."""
+    run = _runs.get(request_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="unknown request_id (may have expired)")
+    return PollResponse(
+        request_id=request_id,
+        status=run.status,
+        total_events=len(run.events),
+        events=run.events[since:],
     )
 
 
