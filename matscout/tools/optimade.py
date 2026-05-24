@@ -36,30 +36,28 @@ _PROVIDERS: dict[str, tuple[str, str]] = {
         "Materials Project",
         "https://optimade.materialsproject.org/v1",
     ),
-    "aflow": (
-        "AFLOW",
-        "https://aflow.org/API/optimade/v1",
-    ),
     "cod": (
         "Crystallography Open Database",
         "https://www.crystallography.net/cod/optimade/v1",
+    ),
+    "nomad": (
+        "NOMAD",
+        "https://nomad-lab.eu/prod/v1/optimade/v1",
+    ),
+    "alexandria": (
+        "Alexandria (Bochum)",
+        "https://alexandria.icams.rub.de/pbe/v1",
     ),
     "jarvis": (
         "JARVIS-DFT (NIST)",
         "https://jarvis.nist.gov/optimade/jarvisdft/v1",
     ),
-    "mcloud": (
-        "Materials Cloud",
-        "https://www.materialscloud.org/optimade/main/v1",
-    ),
     "odbx": (
-        "Open Database of Xtals",
+        "Open Database of Xtals (odbx)",
         "https://optimade.odbx.science/v1",
     ),
-    "mpdd": (
-        "Material-Property-Descriptor Database",
-        "https://mpdd.matse.illinois.edu/optimade/v1",
-    ),
+    # Dropped 2026-05: aflow (500), mcloud (404), mpdd (timeout). Re-add
+    # when their OPTIMADE endpoints come back up.
 }
 
 _USER_AGENT = "matscout/0.1 (+https://matscout.prfo.design)"
