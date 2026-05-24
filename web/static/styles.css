@@ -853,3 +853,57 @@ footer a { color: var(--fg-2); text-decoration: none; border-bottom: 1px dashed 
   font-weight: 700;
 }
 .ev.phase .ts { color: var(--fg-3); }
+
+/* ── Inline CIF preview (toggled by ⬇ CIF chip) ───────────────────────── */
+.cif-preview {
+  display: block;
+  margin: 8px 0 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--rad-lg);
+  overflow: hidden;
+  max-width: 680px;
+}
+.cif-preview__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  background: var(--bg-1);
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--fg-3);
+}
+.cif-preview__save {
+  display: inline-block;
+  padding: 4px 10px;
+  background: var(--acc);
+  color: #14140d;
+  border-radius: var(--rad);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-decoration: none;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+.cif-preview__save:hover { opacity: 0.85; }
+.cif-preview__body {
+  margin: 0;
+  padding: 12px 14px;
+  max-height: 360px;
+  overflow: auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--fg-2);
+  background: var(--bg);
+  white-space: pre;
+  tab-size: 2;
+}
+button.cif-link.on, button.view-link.on {
+  background: var(--acc-soft);
+  border-color: var(--acc);
+  color: var(--acc);
+}

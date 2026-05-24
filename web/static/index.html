@@ -17,9 +17,13 @@
   function load3Dmol() {
     if (window.$3Dmol) return Promise.resolve();
     if (window._3DmolReady) return window._3DmolReady;
+    // jsdelivr is faster and more globally reachable than 3Dmol.org's
+    // own Apache host (RU edge especially); cdnjs is the secondary
+    // fallback if jsdelivr ever flakes.
     window._3DmolReady = new Promise((resolve, reject) => {
       const s = document.createElement('script');
-      s.src = 'https://3Dmol.org/build/3Dmol-min.js';
+      s.src = 'https://cdn.jsdelivr.net/npm/3dmol@2.0.4/build/3Dmol-min.js';
+      s.crossOrigin = 'anonymous';
       s.onload = () => resolve();
       s.onerror = () => reject(new Error('failed to load 3Dmol.js'));
       document.head.appendChild(s);
@@ -503,6 +507,64 @@ function sleep(ms) {
 }
 
 /**
+ * Toggle an inline CIF text preview after the clicked '⬇ CIF' button.
+ * First click fetches the CIF, expands a <pre> block with the text,
+ * adds a "save as .cif" button INSIDE it. Second click collapses.
+ *
+ * Reads better than an opaque silent download for a user who wants to
+ * see what the file contains before saving — most of the time the
+ * answer is "yes, this is the right material" and the preview is
+ * enough; the save button is there if they actually need the file.
+ */
+async function toggleCifPreview(btn, materialId) {
+  const existing = btn.nextElementSibling;
+  if (existing && existing.classList?.contains('cif-preview')) {
+    existing.remove();
+    btn.classList.remove('on');
+    return;
+  }
+  btn.classList.add('on');
+  btn.disabled = true;
+
+  const holder = document.createElement('div');
+  holder.className = 'cif-preview';
+  holder.innerHTML =
+    '<div class="cv-status mono" style="padding:14px;color:var(--fg-3);font-size:11px;">' +
+    'loading CIF…</div>';
+  btn.parentNode.insertBefore(holder, btn.nextSibling);
+
+  try {
+    const r = await fetch(`/api/structure/${materialId}.cif`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const cif = await r.text();
+
+    holder.innerHTML = '';
+    const head = document.createElement('div');
+    head.className = 'cif-preview__head';
+    head.innerHTML =
+      `<span class="mono">${escAttr(materialId)}.cif · ${cif.split('\n').length} lines</span>`;
+    const dl = document.createElement('a');
+    dl.href = `/api/structure/${materialId}.cif`;
+    dl.setAttribute('download', `${materialId}.cif`);
+    dl.className = 'cif-preview__save';
+    dl.textContent = '↓ Save .cif';
+    head.appendChild(dl);
+    holder.appendChild(head);
+
+    const pre = document.createElement('pre');
+    pre.className = 'cif-preview__body mono';
+    pre.textContent = cif;
+    holder.appendChild(pre);
+  } catch (e) {
+    holder.innerHTML =
+      `<div class="cv-status mono" style="padding:14px;color:var(--err);font-size:11px;">` +
+      `CIF error: ${escAttr(e.message || String(e))}</div>`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+/**
  * Toggle a 3D crystal viewer inline after the clicked '◊ 3D' button.
  * First click loads 3Dmol.js from CDN, fetches the CIF, instantiates the
  * viewer. Subsequent clicks just hide/show the existing container.
@@ -561,7 +623,21 @@ async function toggleCrystalViewer(btn, materialId) {
     caption.textContent = `${materialId} · drag to rotate · scroll to zoom`;
     holder.appendChild(caption);
   } catch (e) {
-    holder.querySelector('.cv-status').textContent = `viewer error: ${e.message}`;
+    // The .cv-status node may already have been removed by the success
+    // path that ran before the error — re-create it if so.
+    let status = holder.querySelector('.cv-status');
+    if (!status) {
+      status = document.createElement('div');
+      status.className = 'cv-status mono';
+      status.style.cssText =
+        'position:absolute;inset:0;display:flex;align-items:center;' +
+        'justify-content:center;color:var(--err);font-size:10px;padding:8px;text-align:center;';
+      holder.innerHTML = '';
+      holder.appendChild(status);
+    }
+    status.style.color = 'var(--err)';
+    status.textContent = `viewer error: ${e?.message || String(e)}`;
+    console.error('[3D viewer]', materialId, e);
   } finally {
     btn.disabled = false;
   }
@@ -1260,12 +1336,15 @@ function enrichAnswerWithMpLinks(root) {
       a.textContent = m[0];
       frag.appendChild(a);
       // Inline action chips right after each mp-id.
-      const dl = document.createElement('a');
-      dl.href = `/api/structure/${m[0]}.cif`;
-      dl.className = 'cif-link';
-      dl.textContent = '⬇ CIF';
-      dl.title = `Download CIF file for ${m[0]}`;
-      dl.setAttribute('download', `${m[0]}.cif`);
+      // CIF chip: click opens an inline text preview with a download
+      // button INSIDE it — easier than the previous "just download
+      // silently" pattern when the user wants to look at the file.
+      const cifBtn = document.createElement('button');
+      cifBtn.type = 'button';
+      cifBtn.className = 'cif-link';
+      cifBtn.textContent = '⬇ CIF';
+      cifBtn.title = `Preview / download CIF file for ${m[0]}`;
+      cifBtn.addEventListener('click', () => toggleCifPreview(cifBtn, m[0]));
       // 3D viewer toggle — clicking expands an inline crystal viewer with
       // the structure rotating in a ball-and-stick model.
       const view = document.createElement('button');
@@ -1273,9 +1352,9 @@ function enrichAnswerWithMpLinks(root) {
       view.className = 'view-link';
       view.textContent = '◊ 3D';
       view.title = `Open 3D crystal viewer for ${m[0]}`;
-      view.addEventListener('click', (e) => toggleCrystalViewer(view, m[0]));
+      view.addEventListener('click', () => toggleCrystalViewer(view, m[0]));
       frag.appendChild(document.createTextNode(' '));
-      frag.appendChild(dl);
+      frag.appendChild(cifBtn);
       frag.appendChild(document.createTextNode(' '));
       frag.appendChild(view);
       lastIdx = m.index + m[0].length;
