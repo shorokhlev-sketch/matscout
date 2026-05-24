@@ -100,11 +100,12 @@ def search_materials(
     is_metal: bool | None = None,
     is_gap_direct: bool | None = None,
     limit: int = 50,
-) -> list[dict[str, Any]]:
+) -> dict[str, Any]:
     """Search Materials Project for candidates matching property filters.
 
-    All filters AND together. Returns compact candidate rows (material_id,
-    formula, key properties). Use get_material for the full sheet.
+    All filters AND together. Returns ``{"count": N, "materials": [...]}``
+    with compact candidate rows (material_id, formula, key properties).
+    Use get_material for the full sheet of any individual candidate.
     """
     filters = SearchFilters(
         elements=elements,
@@ -119,7 +120,8 @@ def search_materials(
         is_gap_direct=is_gap_direct,
         limit=limit,
     )
-    return [c.model_dump(mode="json") for c in _search_materials(filters)]
+    cands = [c.model_dump(mode="json") for c in _search_materials(filters)]
+    return {"count": len(cands), "materials": cands}
 
 
 def get_material(material_id: str) -> dict[str, Any]:
@@ -280,97 +282,108 @@ def find_preprints(
 # ── Application-aware combinators ──────────────────────────────────────────
 
 
+def _wrap_list(cands: list[Any]) -> dict[str, Any]:
+    """Return a single-dict wrapper so FastMCP serialises one content block.
+
+    FastMCP serialises ``list[dict]`` returns as N separate text-content
+    blocks, and OpenAI's MCP-tool integration only carries the first
+    block into the model's view. Wrapping the list keeps all candidates
+    visible to the agent.
+    """
+    rows = [c.model_dump(mode="json") for c in cands]
+    return {"count": len(rows), "materials": rows}
+
+
 def find_battery_anode(
     chemistry: str = "lithium",
     limit: int = 10,
-) -> list[dict[str, Any]]:
+) -> dict[str, Any]:
     """Pre-tuned anode candidates for solid-state batteries.
 
     Use this instead of generic search_materials whenever the user asks
     for "anode", "battery negative electrode", or names a specific
     chemistry. Filters by the element shortlist that real Li / Na / Mg
     / K anodes use, excludes radioactives, and skips pure metals that
-    aren't intercalation hosts.
+    aren't intercalation hosts. Returns
+    ``{"count": N, "materials": [...]}``.
 
     Args:
         chemistry: "lithium" | "sodium" | "magnesium" | "potassium".
         limit: how many candidates to return.
     """
-    cands = _find_battery_anode(chemistry=chemistry, limit=limit)  # type: ignore[arg-type]
-    return [c.model_dump(mode="json") for c in cands]
+    return _wrap_list(_find_battery_anode(chemistry=chemistry, limit=limit))  # type: ignore[arg-type]
 
 
 def find_battery_cathode(
     chemistry: str = "lithium",
     limit: int = 10,
-) -> list[dict[str, Any]]:
+) -> dict[str, Any]:
     """Pre-tuned cathode candidates (intercalation oxides / phosphates).
 
     Filters to mixed-valence transition-metal compounds containing the
     working ion (Li or Na). Use for "cathode", "positive electrode",
-    "LiCoO2-class", etc.
+    "LiCoO2-class", etc. Returns ``{"count": N, "materials": [...]}``.
 
     Args:
         chemistry: "lithium" | "sodium".
         limit: how many candidates to return.
     """
-    cands = _find_battery_cathode(chemistry=chemistry, limit=limit)  # type: ignore[arg-type]
-    return [c.model_dump(mode="json") for c in cands]
+    return _wrap_list(_find_battery_cathode(chemistry=chemistry, limit=limit))  # type: ignore[arg-type]
 
 
 def find_solar_absorber(
     exclude_toxic: bool = True,
     require_direct_gap: bool = False,
     limit: int = 10,
-) -> list[dict[str, Any]]:
+) -> dict[str, Any]:
     """Single-junction solar absorbers near the Shockley-Queisser optimum.
 
     Band gap 1.1-1.7 eV, stable, optionally non-toxic / direct-gap.
-    Use for "solar cell", "photovoltaic", "absorber layer".
+    Returns ``{"count": N, "materials": [...]}``.
 
     Args:
         exclude_toxic: drop Pb, Cd, As, Hg, Tl, Be compounds.
         require_direct_gap: only direct-gap semiconductors.
         limit: max candidates.
     """
-    cands = _find_solar_absorber(
-        exclude_toxic=exclude_toxic,
-        require_direct_gap=require_direct_gap,
-        limit=limit,
+    return _wrap_list(
+        _find_solar_absorber(
+            exclude_toxic=exclude_toxic,
+            require_direct_gap=require_direct_gap,
+            limit=limit,
+        )
     )
-    return [c.model_dump(mode="json") for c in cands]
 
 
 def find_thermoelectric(
     target_gap: str = "narrow",
     limit: int = 10,
-) -> list[dict[str, Any]]:
+) -> dict[str, Any]:
     """Thermoelectric candidates — narrow-gap, often heavy chalcogenide.
 
-    Use for "thermoelectric", "Seebeck", "ZT", "Peltier".
+    Use for "thermoelectric", "Seebeck", "ZT", "Peltier". Returns
+    ``{"count": N, "materials": [...]}``.
 
     Args:
         target_gap: "metallic" | "very-narrow" | "narrow".
         limit: max candidates.
     """
-    cands = _find_thermoelectric(target_gap=target_gap, limit=limit)  # type: ignore[arg-type]
-    return [c.model_dump(mode="json") for c in cands]
+    return _wrap_list(_find_thermoelectric(target_gap=target_gap, limit=limit))  # type: ignore[arg-type]
 
 
 def find_transparent_conductor(
     limit: int = 10,
-) -> list[dict[str, Any]]:
+) -> dict[str, Any]:
     """Wide-gap oxide candidates for TCO applications.
 
-    Returns undoped wide-gap oxides; the agent should note in its
-    answer that real conductivity requires extrinsic doping that MP
-    doesn't store.
+    Returns ``{"count": N, "materials": [...]}``. The agent should note
+    in its answer that real conductivity requires extrinsic doping
+    that MP does not capture.
 
     Args:
         limit: max candidates.
     """
-    cands = _find_transparent_conductor(limit=limit)
-    return [c.model_dump(mode="json") for c in cands]
+    return _wrap_list(_find_transparent_conductor(limit=limit))
 
 
 # ── Property-sheet expansions ──────────────────────────────────────────────

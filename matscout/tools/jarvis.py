@@ -35,11 +35,18 @@ _USER_AGENT = "matscout/0.1 (+https://matscout.prfo.design)"
 _HTTP_TIMEOUT = 30.0
 
 
+class _JarvisUnreachable(Exception):
+    """JARVIS endpoint not reachable right now — recover gracefully upstream."""
+
+
 def _fetch(url: str) -> list[dict[str, Any]]:
     """Cached fetch — JARVIS tables are static, hours-of-TTL is fine.
 
     The cache layer only stores dicts, so we wrap/unwrap the list payload
-    under a ``data`` key. Cheap and keeps cache's contract intact.
+    under a ``data`` key. Cheap and keeps cache's contract intact. On
+    network failure or non-200 status we raise ``_JarvisUnreachable``;
+    callers convert that to a structured "unavailable" payload so the
+    agent gets actionable feedback instead of a tool execution error.
     """
     cache = get_cache()
     cached = cache.get("_jarvis_fetch", {"url": url})
@@ -47,18 +54,41 @@ def _fetch(url: str) -> list[dict[str, Any]]:
         rows = cached.get("data") or []
         return list(rows)
 
-    with httpx.Client(timeout=_HTTP_TIMEOUT, follow_redirects=True) as c:
-        resp = c.get(url, headers={"User-Agent": _USER_AGENT})
-        if resp.status_code != 200:
-            raise RuntimeError(
-                f"JARVIS endpoint {url!r} returned HTTP {resp.status_code}. "
-                "Try again later; JARVIS occasionally serves slow."
-            )
+    try:
+        with httpx.Client(timeout=_HTTP_TIMEOUT, follow_redirects=True) as c:
+            resp = c.get(url, headers={"User-Agent": _USER_AGENT})
+    except (httpx.HTTPError, OSError) as e:
+        raise _JarvisUnreachable(f"network error fetching {url}: {e}") from e
+
+    if resp.status_code != 200:
+        raise _JarvisUnreachable(
+            f"JARVIS endpoint {url} returned HTTP {resp.status_code} "
+            "(NIST sometimes throttles or moves their static dumps)"
+        )
+    try:
         data = resp.json()
+    except ValueError as e:
+        raise _JarvisUnreachable(f"JARVIS returned non-JSON from {url}: {e}") from e
     if not isinstance(data, list):
-        raise RuntimeError(f"JARVIS returned non-list payload from {url!r}")
+        raise _JarvisUnreachable(f"JARVIS returned non-list payload from {url}")
     cache.put("_jarvis_fetch", {"url": url}, {"data": data})
     return data
+
+
+def _unavailable_payload(reason: str, table: str) -> dict[str, Any]:
+    """Structured 'JARVIS down' response — agent treats it as a no-data answer."""
+    return {
+        "source": "jarvis-dft",
+        "table": table,
+        "available": False,
+        "count": 0,
+        "materials": [],
+        "note": (
+            f"JARVIS-DFT static endpoints are temporarily unreachable ({reason}). "
+            "Proceed with Materials Project data only and note the limitation in "
+            "the final answer."
+        ),
+    }
 
 
 def find_2d_materials(
@@ -83,7 +113,10 @@ def find_2d_materials(
         exfoliation_energy, band_gap_optb88vdw, ehull_per_atom,
         spacegroup, jarvis_url}``.
     """
-    table = _fetch(_JARVIS_2D_URL)
+    try:
+        table = _fetch(_JARVIS_2D_URL)
+    except _JarvisUnreachable as e:
+        return _unavailable_payload(str(e), "2D materials")
     out: list[dict[str, Any]] = []
     want = {e.strip().title() for e in (elements or [])}
     for row in table:
@@ -150,7 +183,10 @@ def get_jarvis_topological() -> dict[str, Any]:
     Returns:
         ``{"source", "count", "materials": [...]}``
     """
-    table = _fetch(_JARVIS_TOPO_URL)
+    try:
+        table = _fetch(_JARVIS_TOPO_URL)
+    except _JarvisUnreachable as e:
+        return _unavailable_payload(str(e), "topological")
     out: list[dict[str, Any]] = []
     for row in table:
         out.append(

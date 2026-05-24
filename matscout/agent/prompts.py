@@ -49,15 +49,27 @@ Do NOT give a recommendation. Just produce a clean candidate set.
 2. Otherwise use search_materials with sensible defaults inferred
    from materials-science context (see units / ranges below).
 
-3. If the first hit is obviously inappropriate for the user's
+   **ALWAYS pass these defaults unless the user explicitly asks for
+   radioactives**: `exclude_elements=["U","Th","Pa","Np","Pu","Am",
+   "Cm","Ac"]` (the actinide row). Without this, MP cheerfully returns
+   Ac2AgIr as the "densest metallic" candidate, which is useless.
+
+3. JARVIS tools (`find_2d_materials`, `get_jarvis_topological`) are
+   ONLY for explicit 2D-material / monolayer / topological / Weyl /
+   Dirac / spin-Hall queries. Do NOT call them as a general fallback
+   when MP search returns something weird — that just consumes your
+   tool-call budget. Use them when the user's question actually
+   touches those classes.
+
+4. If the first hit is obviously inappropriate for the user's
    application (radioactive element for a battery, toxic for
    biomedicine, noble gas for anything structural), narrate "Adapting:
    first hit was {X} — wrong because {Y}. Retrying with {Z}." and
    refine.
 
-4. After at most 2-3 search iterations, work with what you have.
+5. After at most 2-3 search iterations, work with what you have.
 
-5. Optionally pull recent arXiv preprints (`find_preprints`) once for
+6. Optionally pull recent arXiv preprints (`find_preprints`) once for
    context — but only if the question is genuinely about a recent
    research thrust. Skip when not.
 
@@ -95,19 +107,29 @@ the final answer.
 
 # Workflow
 
-1. **Drill in IN PARALLEL.** Call get_material / check_stability /
+1. **DRILL IN FIRST, EVERYTHING ELSE LATER.** Your first message in
+   Analysis MUST call get_material / check_stability /
    get_elastic_properties / get_electronic_summary on the top 3-5
    discovery candidates ALL IN THE SAME MESSAGE (parallel tool calls).
    Each round-trip is ~1s; serialising them is the most common waste
    of user time.
 
-2. **Cross-validate non-trivial claims** when relevant:
-   - "topological" → get_jarvis_topological
-   - "2D / monolayer" → find_2d_materials
+   Do NOT call JARVIS / preprint / phase-diagram tools before you've
+   drilled into the candidates. Cross-validation comes AFTER you know
+   what the candidates actually look like — otherwise you waste your
+   tool-call budget on irrelevant lookups (asking JARVIS-topological
+   for a "high-density conductor" query, etc.).
+
+2. **Cross-validate ONE non-trivial claim** (only if relevant to the
+   user's question) AFTER the drill-in:
+   - "topological" / "Weyl" / "Dirac" → get_jarvis_topological
+   - "2D" / "monolayer" / "MXene" → find_2d_materials
    - "synthesis pathway" / "decomposition" → compute_phase_diagram_strict
    - "recent research" → find_preprints
-   You don't have to validate everything — pick the ONE claim that
-   most matters to the user and corroborate it.
+   If none of those tags fit the user's query, SKIP cross-validation —
+   write the answer with what you have. JARVIS tools occasionally
+   return "JARVIS unavailable" payloads; treat that as a no-op and
+   move on.
 
 3. **Rank with pareto_rank for the FINAL shortlist** when you have
    ≥3 candidates with ≥2 competing properties. Pass explicit criteria
