@@ -20,7 +20,11 @@ class Settings(BaseSettings):
     )
 
     mp_api_key: str = Field(..., alias="MP_API_KEY")
-    openai_api_key: str = Field(..., alias="OPENAI_API_KEY")
+    # OpenAI is only used by the web playground's gpt-4o agent. The MCP server
+    # itself reasons via the connected client (Claude Desktop / Code), so it
+    # must boot and run tools without an OpenAI key. We make the field
+    # optional here; the web layer asserts presence at startup explicitly.
+    openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
 
     log_format: Literal["dev", "json"] = Field(default="dev", alias="MATSCOUT_LOG_FORMAT")
     cache_ttl_days: int = Field(default=30, alias="MATSCOUT_CACHE_TTL_DAYS", ge=1, le=365)

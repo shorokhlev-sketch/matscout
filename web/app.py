@@ -136,6 +136,26 @@ app = FastAPI(
 )
 
 
+@app.on_event("startup")
+async def _startup_check_openai_key() -> None:
+    """Fail fast if the web playground was started without an OpenAI key.
+
+    The MCP server tolerates a missing OPENAI_API_KEY (its reasoning layer
+    is the connected Claude client), so we don't enforce it in config.py.
+    But the web playground absolutely needs it for the gpt-4o agent, and
+    discovering that at the first user query is too late.
+    """
+    from matscout.config import get_settings
+
+    if not get_settings().openai_api_key:
+        raise RuntimeError(
+            "OPENAI_API_KEY is not configured. The web playground uses gpt-4o "
+            "as the agent's reasoning layer; please set OPENAI_API_KEY in the "
+            "environment before starting uvicorn. (Note: the MCP server entry "
+            "point does not need this key — clients bring their own LLM.)"
+        )
+
+
 # ── In-memory run registry ──────────────────────────────────────────────────
 # This is intentionally a single-process dict — one uvicorn worker, low
 # concurrency. If we ever scale out we'd put this in Redis, but the cost of

@@ -125,7 +125,14 @@ def stream_agent(
     if client is None:
         # Only touch env-backed Settings if we actually need to build a real
         # client — lets unit tests inject a fake without setting MP/OpenAI keys.
-        client = OpenAI(api_key=get_settings().openai_api_key)
+        api_key = get_settings().openai_api_key
+        if not api_key:
+            raise RuntimeError(
+                "OPENAI_API_KEY is not configured. The web playground uses gpt-4o "
+                "for agent reasoning; please set OPENAI_API_KEY in the environment. "
+                "(MCP usage via Claude Desktop / Code does not need this key.)"
+            )
+        client = OpenAI(api_key=api_key)
     tools = tools_to_openai_specs(ALL_TOOLS)
 
     if prior_messages:

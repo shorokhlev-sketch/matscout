@@ -245,6 +245,16 @@ def find_preprints(
 
 
 # Canonical registry — both MCP server and agent runner iterate over this list.
+#
+# Note on literature tools: Semantic Scholar's anonymous endpoint rate-limits
+# aggressively (HTTP 429 on common queries from a single IP, and HTTP 403 from
+# many cloud-provider egress ranges). We had find_papers / get_papers_about
+# pointing at S2 — useful when they worked, but inconsistent enough to be a
+# trap for a first-time visitor poking the playground. Pulled both from the
+# canonical list and let the agent rely on the two stable literature surfaces:
+# get_doi_metadata (CrossRef, ungated) and find_preprints (arXiv, ungated).
+# The S2-backed functions still exist in literature.py for direct callers who
+# have an API key and want to use them.
 ALL_TOOLS: list[Callable[..., Any]] = [
     search_materials,
     get_material,
@@ -254,8 +264,6 @@ ALL_TOOLS: list[Callable[..., Any]] = [
     predict_decomposition,
     get_competing_phases,
     get_structure,
-    find_papers,
-    get_papers_about,
     get_doi_metadata,
     find_preprints,
 ]

@@ -32,7 +32,7 @@
 
 <header class="top">
   <a href="/" class="brand" data-brand-home>matscout</a>
-  <span class="tag" data-i18n="header.tag">MCP server + OpenAI agent over Materials Project</span>
+  <span class="tag" data-i18n="header.tag">OpenAI playground · MCP server available</span>
   <span class="locale-switch" role="group" aria-label="Language">
     <button class="loc-btn" data-locale="en" aria-pressed="true">EN</button>
     <button class="loc-btn" data-locale="ru" aria-pressed="false">RU</button>
@@ -40,9 +40,45 @@
   <span class="meta">
     <a href="https://next-gen.materialsproject.org/" target="_blank" rel="noopener">MP</a>
     <span> · </span>
+    <button type="button" class="meta-link" id="mcp-info-btn" data-i18n="header.useMcp">Use as MCP</button>
+    <span> · </span>
     <a href="/docs" target="_blank">OpenAPI</a>
   </span>
 </header>
+
+<!-- Modal: how to use matscout as an MCP server in Claude Desktop / Code -->
+<div class="mcp-modal" id="mcp-modal" role="dialog" aria-modal="true" hidden>
+  <div class="mcp-modal__card">
+    <button class="mcp-modal__close" id="mcp-modal-close" aria-label="Close">✕</button>
+    <h2 data-i18n="mcp.title">You're using the OpenAI agent right now.</h2>
+    <p data-i18n="mcp.body1">
+      This playground reasons with gpt-4o. The same 10 typed tools are also exposed as an
+      <strong>MCP server</strong> — point Claude Desktop or Claude Code at it and the
+      reasoning layer becomes Claude (or whatever client you use). Same tools, your LLM.
+    </p>
+    <p data-i18n="mcp.body2">
+      In Claude Desktop, drop this into <code>~/Library/Application Support/Claude/claude_desktop_config.json</code>
+      (or the equivalent on Windows / Linux), then restart Claude:
+    </p>
+    <pre class="mcp-modal__pre" id="mcp-config-snippet"><code>{
+  "mcpServers": {
+    "matscout": {
+      "command": "uvx",
+      "args": ["--from", "git+https://github.com/shorokhlev-sketch/matscout", "matscout-mcp"],
+      "env": {
+        "MP_API_KEY": "&lt;your Materials Project API key&gt;"
+      }
+    }
+  }
+}</code></pre>
+    <p class="mcp-modal__small" data-i18n="mcp.body3">
+      Only <code>MP_API_KEY</code> is required for the MCP path — the MCP server doesn't
+      run gpt-4o internally; the reasoning is whatever client you connect with.
+      Source: <a href="https://github.com/shorokhlev-sketch/matscout" target="_blank" rel="noopener">github.com/shorokhlev-sketch/matscout</a>.
+    </p>
+    <button class="mcp-modal__copy" id="mcp-copy-btn" data-i18n="mcp.copy">Copy snippet</button>
+  </div>
+</div>
 
 <main>
   <section class="col left">
@@ -101,7 +137,14 @@
 // ── i18n dictionary ─────────────────────────────────────────────────────────
 const I18N = {
   en: {
-    'header.tag': 'MCP server + OpenAI agent over Materials Project',
+    'header.tag': 'OpenAI playground · MCP server available',
+    'header.useMcp': 'Use as MCP',
+    'mcp.title': "You're using the OpenAI agent right now.",
+    'mcp.body1': 'This playground reasons with gpt-4o. The same 10 typed tools are also exposed as an <strong>MCP server</strong> — point Claude Desktop or Claude Code at it and the reasoning layer becomes Claude (or whatever client you use). Same tools, your LLM.',
+    'mcp.body2': 'In Claude Desktop, drop this into <code>~/Library/Application Support/Claude/claude_desktop_config.json</code> (or the equivalent on Windows / Linux), then restart Claude:',
+    'mcp.body3': "Only <code>MP_API_KEY</code> is required for the MCP path — the MCP server doesn't run gpt-4o internally; the reasoning is whatever client you connect with. Source: <a href=\"https://github.com/shorokhlev-sketch/matscout\" target=\"_blank\" rel=\"noopener\">github.com/shorokhlev-sketch/matscout</a>.",
+    'mcp.copy': 'Copy snippet',
+    'mcp.copied': 'Copied ✓',
     'left.title': 'Ask a materials question',
     'left.intro': "Type a natural-language description of a material you need. The agent will translate it to property filters, query the database, self-correct if it gets zero or too many hits, and synthesize a ranked shortlist with trade-offs.",
     'left.queryLabel': 'Your query',
@@ -148,7 +191,14 @@ const I18N = {
     'startFail': 'Failed to start run',
   },
   ru: {
-    'header.tag': 'MCP-сервер + OpenAI-агент над Materials Project',
+    'header.tag': 'OpenAI-плейграунд · MCP-сервер доступен отдельно',
+    'header.useMcp': 'Подключить как MCP',
+    'mcp.title': 'Сейчас вы общаетесь с OpenAI-агентом.',
+    'mcp.body1': 'Этот плейграунд думает gpt-4o. Те же 10 типизированных тулов выставлены ещё и как <strong>MCP-сервер</strong> — направьте на него Claude Desktop или Claude Code, и рассуждающим слоем станет Claude (или другой ваш клиент). Те же тулы, ваш LLM.',
+    'mcp.body2': 'В Claude Desktop добавьте это в <code>~/Library/Application Support/Claude/claude_desktop_config.json</code> (или его эквивалент на Windows / Linux) и перезапустите Claude:',
+    'mcp.body3': "MCP-серверу нужен только <code>MP_API_KEY</code> — gpt-4o внутри он не вызывает, рассуждение делает ваш подключённый клиент. Исходник: <a href=\"https://github.com/shorokhlev-sketch/matscout\" target=\"_blank\" rel=\"noopener\">github.com/shorokhlev-sketch/matscout</a>.",
+    'mcp.copy': 'Скопировать сниппет',
+    'mcp.copied': 'Скопировано ✓',
     'left.title': 'Задайте вопрос о материалах',
     'left.intro': 'Опишите словами материал, который вам нужен. Агент переведёт описание в фильтры свойств, запросит базу, при 0 или слишком многих кандидатах сам подстроит ограничения и вернёт ранжированный шорт-лист с разбором компромиссов.',
     'left.queryLabel': 'Ваш запрос',
@@ -1155,6 +1205,46 @@ async function resumeSnapshotConversationOnce() {
 // First paint
 applyI18n();
 maybeReplaySnapshot();
+
+// ── "Use as MCP" modal ────────────────────────────────────────────────────
+// The header tag says "OpenAI playground · MCP server available" — clicking
+// "Use as MCP" opens the snippet they need to paste into Claude Desktop's
+// config. Important framing because the playground itself reasons with
+// gpt-4o, and a visitor here could otherwise leave thinking they trialed
+// the MCP path when they only trialed the OpenAI one.
+(function wireMcpModal() {
+  const btn = document.getElementById('mcp-info-btn');
+  const modal = document.getElementById('mcp-modal');
+  const closeBtn = document.getElementById('mcp-modal-close');
+  const copyBtn = document.getElementById('mcp-copy-btn');
+  const snippet = document.getElementById('mcp-config-snippet');
+  if (!btn || !modal) return;
+
+  function open() { modal.hidden = false; document.body.style.overflow = 'hidden'; }
+  function close() { modal.hidden = true; document.body.style.overflow = ''; }
+
+  btn.addEventListener('click', open);
+  closeBtn.addEventListener('click', close);
+  modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !modal.hidden) close(); });
+
+  copyBtn.addEventListener('click', async () => {
+    try {
+      // Use innerText so HTML-encoded angle brackets ("&lt;") render plain.
+      await navigator.clipboard.writeText(snippet.innerText);
+      const original = copyBtn.textContent;
+      copyBtn.textContent = t('mcp.copied');
+      setTimeout(() => { copyBtn.textContent = original; }, 1500);
+    } catch (e) {
+      // Fall back: select the text so the user can ⌘C manually.
+      const range = document.createRange();
+      range.selectNodeContents(snippet);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+  });
+})();
 
 // ── browser back/forward across past runs ────────────────────────────────
 // When the user navigates to a previously pushed history entry, the simplest
