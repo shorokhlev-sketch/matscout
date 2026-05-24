@@ -31,7 +31,12 @@ from pydantic import BaseModel, Field
 
 from matscout.agent.runner import TraceEvent, stream_agent
 from matscout.provenance import build_metadata
-from matscout.research import extract_material_ids, get_store, to_bibtex
+from matscout.research import (
+    extract_material_ids,
+    get_store,
+    reconstruct_messages_from_snapshot,
+    to_bibtex,
+)
 from matscout.tool_facades import get_structure as _get_structure_facade
 
 
@@ -425,6 +430,38 @@ async def get_research(request_id: str) -> dict[str, Any]:
 async def view_research(request_id: str) -> HTMLResponse:
     """Serve the SPA — the JS sniffs the URL path and replays the saved run."""
     return HTMLResponse((STATIC_DIR / "index.html").read_text(encoding="utf-8"))
+
+
+class ResumeResponse(BaseModel):
+    conversation_id: str
+    n_messages: int
+
+
+@app.post("/api/research/{request_id}/resume", response_model=ResumeResponse)
+async def resume_from_snapshot(request_id: str) -> ResumeResponse:
+    """Reconstruct an OpenAI conversation from a saved snapshot's trace.
+
+    Lets a visitor land on /r/{id} and ask a follow-up question with the
+    original run's full context. We rebuild the message list (system,
+    original user query, the assistant↔tool exchange, the original final
+    answer), park it in the in-memory _conversations registry, and hand
+    back the new conversation_id so the client can pass it on subsequent
+    POST /api/query calls.
+    """
+    snapshot = get_store().load(request_id)
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail="unknown request_id")
+    from matscout.agent.prompts import SYSTEM_PROMPT_V1
+
+    messages = reconstruct_messages_from_snapshot(snapshot, SYSTEM_PROMPT_V1)
+    cid = uuid.uuid4().hex[:12]
+    locale = snapshot.get("locale") or "en"
+    _conversations[cid] = Conversation(
+        conversation_id=cid,
+        messages=messages,
+        locale=locale,
+    )
+    return ResumeResponse(conversation_id=cid, n_messages=len(messages))
 
 
 @app.get("/api/research/{request_id}/citation")

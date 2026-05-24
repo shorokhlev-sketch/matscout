@@ -352,6 +352,13 @@ const POLL_NETWORK_RETRY_MS = 1500;
 const POLL_MAX_NETWORK_RETRIES = 12;  // ~18s of network hiccups tolerated
 
 async function ask(query) {
+  // If we landed here from a /r/{id} snapshot view, lazily resume the
+  // original conversation on the very first follow-up so the agent sees
+  // the prior trace's context. Idempotent — second call is a no-op.
+  if (window._snapshotRunId && !window._conversationId) {
+    await resumeSnapshotConversationOnce();
+  }
+
   // First turn clears the slate; follow-ups in the same conversation append
   // a divider and keep prior trace/answer visible so users can re-read what
   // they already learned.
@@ -1088,9 +1095,35 @@ async function maybeReplaySnapshot() {
   // Replay events
   for (const ev of snap.events) handleEvent(ev.kind, ev);
   stopTimer();
-  runBtn.disabled = true;
+  // Leave the input live — a follow-up will be sent against a server-side
+  // reconstructed conversation (see resumeSnapshotConversationOnce).
+  runBtn.disabled = false;
+  $('#q').removeAttribute('readonly');
+  window._snapshotRunId = rid;     // signals: first ask() should resume first
   showShareButton(rid);
   return true;
+}
+
+/**
+ * Lazily resume the snapshot's original conversation server-side. Called
+ * on the user's first follow-up from a /r/{id} view — we POST to the
+ * resume endpoint, get back a fresh conversation_id, then the regular
+ * ask() path uses it like any continuation.
+ */
+async function resumeSnapshotConversationOnce() {
+  if (!window._snapshotRunId) return;
+  try {
+    const r = await fetch(`/api/research/${window._snapshotRunId}/resume`, { method: 'POST' });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    window._conversationId = data.conversation_id;
+  } catch (e) {
+    console.warn('snapshot resume failed:', e.message);
+    // Fall through — the user just gets a fresh conversation. Not ideal
+    // but not blocking; the follow-up still goes through.
+  }
+  // Clear the marker — one-shot.
+  window._snapshotRunId = null;
 }
 
 // First paint
