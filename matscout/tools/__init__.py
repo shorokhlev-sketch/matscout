@@ -17,6 +17,7 @@ from matscout.tools.literature import (
 )
 from matscout.tools.search import search_materials
 from matscout.tools.stability import check_stability
+from matscout.tools.structure import get_structure
 from matscout.tools.synthesis import (
     get_competing_phases,
     get_phase_diagram,
@@ -34,6 +35,7 @@ __all__ = [
     "get_material",
     "get_papers_about",
     "get_phase_diagram",
+    "get_structure",
     "predict_decomposition",
     "search_materials",
 ]

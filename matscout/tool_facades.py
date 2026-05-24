@@ -45,6 +45,9 @@ from matscout.tools import (
     get_phase_diagram as _get_phase_diagram,
 )
 from matscout.tools import (
+    get_structure as _get_structure,
+)
+from matscout.tools import (
     predict_decomposition as _predict_decomposition,
 )
 from matscout.tools import (
@@ -209,6 +212,24 @@ def get_doi_metadata(doi: str) -> dict[str, Any]:
     return _get_doi_metadata(doi).model_dump(mode="json")
 
 
+def get_structure(
+    material_id: str,
+    fmt: str = "cif",
+) -> dict[str, Any]:
+    """Return the canonical crystal structure as a text blob ready for DFT input.
+
+    Use this when the user wants to download/use the structure file in their
+    own calculation. `fmt`:
+      - 'cif'    → CIF (Quantum ESPRESSO, GPAW, OVITO, VESTA — recommended default)
+      - 'poscar' → POSCAR (VASP)
+      - 'xyz'    → XYZ (visualization only, periodicity is lost)
+
+    Returns the content plus suggested filename and structural metadata
+    (lattice, spacegroup, n_sites).
+    """
+    return _get_structure(material_id, fmt=fmt)  # type: ignore[arg-type]
+
+
 def find_preprints(
     query: str,
     max_age_days: int | None = None,
@@ -232,6 +253,7 @@ ALL_TOOLS: list[Callable[..., Any]] = [
     get_phase_diagram,
     predict_decomposition,
     get_competing_phases,
+    get_structure,
     find_papers,
     get_papers_about,
     get_doi_metadata,

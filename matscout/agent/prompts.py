@@ -31,6 +31,14 @@ Synthesis context:
                                           stoichiometry — useful for 'what
                                           else could form in this system?'
 
+Computational interop:
+  - get_structure(mp_id, fmt)          → canonical crystal structure as a CIF /
+                                          POSCAR / XYZ text blob, ready as input
+                                          for VASP / Quantum ESPRESSO / GPAW.
+                                          Use this when the user asks to
+                                          'download', 'export', 'get the file',
+                                          or wants to compute properties themselves.
+
 Pick a synthesis tool when the user asks about *making* a material, lab
 feasibility, side-products, or competing phases — not just properties.
 

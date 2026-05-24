@@ -32,6 +32,7 @@ from pydantic import BaseModel, Field
 from matscout.agent.runner import TraceEvent, stream_agent
 from matscout.provenance import build_metadata
 from matscout.research import extract_material_ids, get_store, to_bibtex
+from matscout.tool_facades import get_structure as _get_structure_facade
 
 STATIC_DIR = Path(__file__).parent / "static"
 RUN_TTL_SECONDS = 600  # how long we keep a finished run around for late pollers
@@ -281,6 +282,28 @@ async def citation_bibtex(request_id: str, request: Request) -> Response:
         media_type="text/plain; charset=utf-8",
         headers={
             "Content-Disposition": f'attachment; filename="matscout-{request_id}.bib"',
+        },
+    )
+
+
+@app.get("/api/structure/{material_id}.{fmt}")
+async def download_structure(material_id: str, fmt: str) -> Response:
+    """Stream the structure file with attachment-Disposition so browsers save it.
+
+    Bypasses the agent entirely — useful for the Download CIF button next
+    to each mp-id link in the rendered answer.
+    """
+    if fmt not in {"cif", "poscar", "xyz"}:
+        raise HTTPException(status_code=400, detail=f"unsupported format: {fmt}")
+    try:
+        result = _get_structure_facade(material_id, fmt=fmt)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from None
+    return Response(
+        content=result["content"],
+        media_type="chemical/x-cif" if fmt == "cif" else "text/plain",
+        headers={
+            "Content-Disposition": f'attachment; filename="{result["filename_suggestion"]}"',
         },
     )
 

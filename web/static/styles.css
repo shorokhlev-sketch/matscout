@@ -381,6 +381,22 @@ button.ghost { background: transparent; color: var(--fg-3); }
   color: var(--acc-2);
   border-bottom-color: var(--acc);
 }
+#answer .cif-link {
+  font-family: var(--mono);
+  font-size: 0.7em;
+  color: var(--fg-3);
+  text-decoration: none;
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  margin-left: 1px;
+  vertical-align: 0.1em;
+  transition: color .12s, border-color .12s;
+}
+#answer .cif-link:hover {
+  color: var(--acc);
+  border-color: var(--acc);
+}
 
 /* References block beneath the answer */
 .references-block {

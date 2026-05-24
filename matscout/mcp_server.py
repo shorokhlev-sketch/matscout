@@ -23,6 +23,7 @@ from matscout.tool_facades import (
     get_material,
     get_papers_about,
     get_phase_diagram,
+    get_structure,
     predict_decomposition,
     search_materials,
 )
@@ -50,6 +51,7 @@ mcp.tool()(check_stability)
 mcp.tool()(get_phase_diagram)
 mcp.tool()(predict_decomposition)
 mcp.tool()(get_competing_phases)
+mcp.tool()(get_structure)
 mcp.tool()(find_papers)
 mcp.tool()(get_papers_about)
 mcp.tool()(get_doi_metadata)

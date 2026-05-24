@@ -497,6 +497,15 @@ function enrichAnswerWithMpLinks() {
       a.className = 'mp-link';
       a.textContent = m[0];
       frag.appendChild(a);
+      // Inline ⬇ CIF link right after each mp-id — direct structure download
+      const dl = document.createElement('a');
+      dl.href = `/api/structure/${m[0]}.cif`;
+      dl.className = 'cif-link';
+      dl.textContent = '⬇ CIF';
+      dl.title = `Download CIF file for ${m[0]}`;
+      dl.setAttribute('download', `${m[0]}.cif`);
+      frag.appendChild(document.createTextNode(' '));
+      frag.appendChild(dl);
       lastIdx = m.index + m[0].length;
     }
     if (lastIdx < text.length) frag.appendChild(document.createTextNode(text.slice(lastIdx)));
