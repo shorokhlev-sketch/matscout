@@ -162,6 +162,16 @@ label.q-label {
   color: var(--fg-3);
   margin-bottom: 8px;
 }
+label.q-label--followup {
+  color: var(--acc);
+}
+label.q-label--followup::before {
+  content: '◆';
+  display: inline-block;
+  margin-right: 6px;
+  font-size: 9px;
+  vertical-align: 1px;
+}
 textarea#q {
   width: 100%;
   min-height: 110px;

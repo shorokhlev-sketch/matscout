@@ -1059,7 +1059,6 @@ async function maybeReplaySnapshot() {
   if (!m) return false;
   const rid = m[1];
   startTimer();  // re-uses the existing elapsed widget — shows total snapshot age
-  $('#q').setAttribute('readonly', 'readonly');
   setStatus('Loading snapshot…', 'live');
 
   let snap;
@@ -1073,8 +1072,14 @@ async function maybeReplaySnapshot() {
     return true;
   }
 
-  // Restore the query input + locale
-  $('#q').value = snap.query;
+  // Snapshot views keep the input empty + prompt the user to ask a
+  // follow-up. The original query is shown in the banner above the trace,
+  // not in the input itself — pre-filling the input would be confusing
+  // (people read it as readonly history, miss that they can continue).
+  $('#q').value = '';
+  $('#q').setAttribute('placeholder', LOCALE === 'ru'
+    ? 'Спросите по этому исследованию — агент помнит контекст…'
+    : 'Ask a follow-up — the agent remembers the prior context…');
   if (snap.locale && SUPPORTED_LOCALES.includes(snap.locale)) {
     LOCALE = snap.locale;
     localStorage.setItem('matscout.locale', LOCALE);
@@ -1100,6 +1105,27 @@ async function maybeReplaySnapshot() {
   runBtn.disabled = false;
   $('#q').removeAttribute('readonly');
   window._snapshotRunId = rid;     // signals: first ask() should resume first
+
+  // Re-label the input so it's obvious the visitor can continue this run.
+  const label = document.querySelector('label[for="q"]');
+  if (label) {
+    label.textContent = (LOCALE === 'ru')
+      ? 'Продолжить разговор'
+      : 'Continue this conversation';
+    label.classList.add('q-label--followup');
+  }
+  // Re-label the primary button too — same hint, second surface.
+  if (runBtn) {
+    runBtn.textContent = (LOCALE === 'ru') ? 'Спросить дальше →' : 'Ask follow-up →';
+  }
+  // Smooth-scroll the input into view and focus it so the user immediately
+  // sees where to type. Without this the input sits up in the column header
+  // while their eyes are on the answer at the bottom of the page.
+  setTimeout(() => {
+    $('#q').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    $('#q').focus();
+  }, 250);
+
   showShareButton(rid);
   return true;
 }
