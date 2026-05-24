@@ -1,61 +1,91 @@
-"""FastMCP-server exposing the 4 tools to any MCP client (Claude Code etc.).
+"""FastMCP server exposing matscout's typed tools to any MCP client.
 
 Wrappers are intentionally thin: they translate flat kwargs (which is how
-MCP/JSON-schema speaks) into our Pydantic input model and convert
-Pydantic outputs back to dicts. The actual logic lives in ``matscout.tools``.
+MCP/JSON-schema speaks) into Pydantic input models and convert outputs
+back to dicts. The actual logic lives in ``matscout.tools``.
 
-Run:
-    matscout-mcp                # console_script installed by pyproject
+Transports:
+
+- **stdio** (default, what console_script ``matscout-mcp`` does): for
+  local Claude Desktop / Code use, where the client spawns the server as
+  a subprocess and pipes JSON-RPC over stdin/stdout.
+- **SSE / streamable HTTP**: when the FastAPI playground mounts this
+  server, MCP becomes reachable as a URL — Claude Desktop ``url`` field
+  in mcpServers config can point straight at production without
+  installing Python anywhere.
+
+Run locally (stdio):
+    matscout-mcp                  # console_script installed by pyproject
     python -m matscout.mcp_server
 """
 
 from __future__ import annotations
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
-from matscout.tool_facades import (
-    check_stability,
-    compare_materials,
-    find_papers,
-    find_preprints,
-    get_competing_phases,
-    get_doi_metadata,
-    get_material,
-    get_papers_about,
-    get_phase_diagram,
-    get_structure,
-    predict_decomposition,
-    search_materials,
-)
+from matscout.tool_facades import ALL_TOOLS
+
+# Hosts/origins from which the MCP HTTP transports will accept requests.
+# Includes localhost (for local dev), the production domain (browser-
+# initiated MCP calls via the playground's OpenAI Responses API hop, and
+# any external Claude Desktop using `url` mode), and OpenAI's outbound
+# range proxy.openai.com that's used when calls come back through their
+# MCP tool feature.
+_ALLOWED_HOSTS = [
+    "127.0.0.1",
+    "127.0.0.1:8011",
+    "127.0.0.1:8090",
+    "localhost",
+    "localhost:8011",
+    "localhost:8090",
+    "matscout.prfo.design",
+    "matscout.prfo.design:443",
+]
+
+_ALLOWED_ORIGINS = [
+    "http://127.0.0.1",
+    "http://127.0.0.1:8090",
+    "http://localhost",
+    "http://localhost:8090",
+    "https://matscout.prfo.design",
+    "https://platform.openai.com",
+]
 
 mcp = FastMCP(
     "matscout",
     instructions=(
-        "Materials Project search agent. Use these tools to find inorganic "
+        "Materials Project research agent. Use these tools to find inorganic "
         "crystalline materials matching property constraints. Workflow: "
         "1) search_materials with reasonable filters → 2) inspect top "
         "candidates with get_material / check_stability → 3) compare_materials "
-        "side-by-side. Energies are in eV/atom, band gaps in eV, density in "
-        "g/cm^3. Materials with energy_above_hull > 0.025 eV/atom are "
-        "unlikely to be synthesizable as a single phase."
+        "side-by-side. For synthesis questions add get_phase_diagram and "
+        "predict_decomposition. For computational hand-off use get_structure "
+        "(CIF / POSCAR / XYZ). Energies are in eV/atom, band gaps in eV, "
+        "density in g/cm^3. Materials with energy_above_hull > 0.025 eV/atom "
+        "are unlikely to be synthesizable as a single phase."
+    ),
+    # Strip the default route prefixes so we can mount the resulting
+    # Starlette app at whatever URL prefix we want (the web playground
+    # mounts at /mcp/sse and /mcp/http to keep both transports available).
+    sse_path="/",
+    message_path="/messages/",
+    streamable_http_path="/",
+    # Allow Host/Origin headers we expect in production. Without this the
+    # FastMCP DNS-rebinding guard rejects any non-localhost host with
+    # "Invalid Host header" before our routes ever see the request.
+    transport_security=TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=_ALLOWED_HOSTS,
+        allowed_origins=_ALLOWED_ORIGINS,
     ),
 )
 
-
-# Register all facades as MCP tools. Docstrings on the facades become
-# the tool descriptions visible to MCP clients.
-mcp.tool()(search_materials)
-mcp.tool()(get_material)
-mcp.tool()(compare_materials)
-mcp.tool()(check_stability)
-mcp.tool()(get_phase_diagram)
-mcp.tool()(predict_decomposition)
-mcp.tool()(get_competing_phases)
-mcp.tool()(get_structure)
-mcp.tool()(find_papers)
-mcp.tool()(get_papers_about)
-mcp.tool()(get_doi_metadata)
-mcp.tool()(find_preprints)
+# Single source of truth: register whatever's in ALL_TOOLS. Keeps the MCP
+# surface and the OpenAI-agent surface lock-stepped — when we add or drop
+# a tool, both update at once.
+for _fn in ALL_TOOLS:
+    mcp.tool()(_fn)
 
 
 def main() -> None:

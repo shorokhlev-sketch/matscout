@@ -129,21 +129,27 @@ STATIC_DIR = Path(__file__).parent / "static"
 RUN_TTL_SECONDS = 600  # how long we keep a finished run around for late pollers
 MAX_CONCURRENT_RUNS = 8
 
-app = FastAPI(
-    title="matscout",
-    description="Materials Project research agent — MCP server + OpenAI agent.",
-    version="0.1.0",
-)
+# Singleton MCP instance — created at module load so its session manager
+# is the same one used by both the SSE and Streamable-HTTP mounts below,
+# and by the OpenAI Responses API agent which calls it over loopback HTTP.
+from matscout.mcp_server import mcp as mcp_instance  # noqa: E402
 
 
-@app.on_event("startup")
-async def _startup_check_openai_key() -> None:
-    """Fail fast if the web playground was started without an OpenAI key.
+@contextlib.asynccontextmanager
+async def _lifespan(_: FastAPI) -> Any:
+    """Combined startup/shutdown lifecycle.
 
-    The MCP server tolerates a missing OPENAI_API_KEY (its reasoning layer
-    is the connected Claude client), so we don't enforce it in config.py.
-    But the web playground absolutely needs it for the gpt-4o agent, and
-    discovering that at the first user query is too late.
+    Two things hang off here:
+
+    1. **OPENAI_API_KEY presence check** — the web playground uses gpt-4o,
+       so this is mandatory. We let config.py keep ``openai_api_key`` as
+       optional (so the standalone MCP stdio entrypoint can boot without
+       it), and fail fast here for the web layer.
+    2. **MCP session manager** — FastMCP's Streamable-HTTP transport runs
+       its session bookkeeping in an anyio task group. Mounting the app
+       without entering ``session_manager.run()`` produces
+       ``RuntimeError("Task group is not initialized")`` on the first
+       request. The fix is to thread its lifespan through ours.
     """
     from matscout.config import get_settings
 
@@ -154,6 +160,41 @@ async def _startup_check_openai_key() -> None:
             "environment before starting uvicorn. (Note: the MCP server entry "
             "point does not need this key — clients bring their own LLM.)"
         )
+
+    async with mcp_instance.session_manager.run():
+        yield
+
+
+app = FastAPI(
+    title="matscout",
+    description="Materials Project research agent — MCP server + OpenAI agent.",
+    version="0.1.0",
+    lifespan=_lifespan,
+)
+
+# ── MCP server, mounted on the same uvicorn process ─────────────────────────
+# The same 10 tools the OpenAI agent uses are also exposed as a live MCP
+# endpoint. Two transports for client compatibility:
+#
+#   /mcp/sse/            — SSE stream (GET, long-lived event-stream)
+#   /mcp/sse/messages/   — SSE client→server posts (advertised in the
+#                          handshake endpoint event)
+#   /mcp/http/           — Streamable HTTP (single POST endpoint, modern
+#                          transport; what OpenAI's Responses API
+#                          expects as a remote MCP server URL, and what
+#                          Claude Desktop's `url` field uses)
+#
+# All three share the singleton FastMCP instance, so changes to
+# ALL_TOOLS propagate to every surface (web playground, MCP-over-HTTP,
+# MCP-over-stdio entrypoint) automatically.
+#
+# ``mount_path`` is deliberately omitted from sse_app(): when Starlette
+# mounts a sub-app, requests inside it see ``scope["root_path"]`` set
+# to the mount prefix, and SseServerTransport already prepends that to
+# the URL it advertises in the endpoint event. Passing mount_path
+# explicitly produces a doubled path like /mcp/sse/mcp/sse/messages/.
+app.mount("/mcp/sse", mcp_instance.sse_app())
+app.mount("/mcp/http", mcp_instance.streamable_http_app())
 
 
 # ── In-memory run registry ──────────────────────────────────────────────────
@@ -182,15 +223,21 @@ class Run:
 
 @dataclass
 class Conversation:
-    """In-memory store of a multi-turn agent conversation.
+    """In-memory state of a multi-turn agent conversation.
 
-    Each turn's full OpenAI message list (system + accumulated user, tool,
-    and assistant messages) is parked here. A follow-up POST /api/query
-    referencing this ``conversation_id`` resumes from these messages so the
-    agent retains context across questions.
+    Under the Responses API + MCP path the canonical continuation token
+    is OpenAI's ``previous_response_id`` — they store the prior message
+    list for us, so we just hand back the last response id on the next
+    turn and the model picks up where it left off.
+
+    The ``messages`` list is kept as a fallback for snapshot-resume
+    flows: when restoring a /r/{id} snapshot whose response_id has
+    expired (OpenAI retains them for a limited window), we reconstruct a
+    message list from saved events and pass it as ``input`` instead.
     """
 
     conversation_id: str
+    last_response_id: str | None = None
     messages: list[dict[str, Any]] = field(default_factory=list)
     locale: str = "en"
     created_at: float = field(default_factory=time.time)
@@ -285,20 +332,27 @@ async def _drive_run(run: Run) -> None:
         )
     from matscout.agent.prompts import SYSTEM_PROMPT_V1
 
-    # If this run continues an existing conversation, hand the prior message
-    # list to the runner so context carries over across turns.
+    # Continuation mode for this turn: prefer the previous response_id
+    # (OpenAI server-side state, the right tool for live conversations).
+    # Fall back to a reconstructed message list when resuming a snapshot
+    # whose response_id has expired.
+    previous_response_id: str | None = None
     prior_messages: list[dict[str, Any]] | None = None
     if run.conversation_id is not None:
         conv = _conversations.get(run.conversation_id)
-        if conv is not None and conv.messages:
-            prior_messages = conv.messages
+        if conv is not None:
+            if conv.last_response_id:
+                previous_response_id = conv.last_response_id
+            elif conv.messages:
+                prior_messages = conv.messages
 
     gen = stream_agent(
         run.query,
         system_prompt=SYSTEM_PROMPT_V1 + locale_hint,
+        previous_response_id=previous_response_id,
         prior_messages=prior_messages,
     )
-    final_state: list[dict[str, Any]] | None = None
+    final_response_id: str | None = None
     try:
         while True:
             ev = await loop.run_in_executor(None, next, gen, None)
@@ -309,7 +363,7 @@ async def _drive_run(run: Run) -> None:
             # a recoverable partial trace on disk.
             _persist(run)
             if ev.kind == "final":
-                final_state = ev.state_messages
+                final_response_id = ev.response_id
                 break
     except Exception as e:
         run.events.append({"kind": "tool_error", "error": f"{type(e).__name__}: {e}"})
@@ -317,12 +371,18 @@ async def _drive_run(run: Run) -> None:
         run.error = str(e)
     else:
         run.status = "done"
-        # Bank the post-turn message list against the conversation so the
-        # next /api/query with this conversation_id resumes cleanly.
-        if run.conversation_id is not None and final_state is not None:
+        # Park the response_id against the conversation so the next
+        # /api/query with this conversation_id resumes via OpenAI's
+        # server-side state. messages stays empty in steady state — only
+        # populated when we resumed from a snapshot.
+        if run.conversation_id is not None and final_response_id is not None:
             conv = _conversations.get(run.conversation_id)
             if conv is not None:
-                conv.messages = final_state
+                conv.last_response_id = final_response_id
+                # Once we've completed at least one Responses turn, drop
+                # the snapshot-reconstructed messages — OpenAI now has the
+                # canonical state.
+                conv.messages = []
                 conv.last_used_at = time.time()
     finally:
         run.finished_at = time.time()

@@ -32,7 +32,7 @@
 
 <header class="top">
   <a href="/" class="brand" data-brand-home>matscout</a>
-  <span class="tag" data-i18n="header.tag">OpenAI playground · MCP server available</span>
+  <span class="tag" data-i18n="header.tag">gpt-4o via MCP · live tools at /mcp/http/</span>
   <span class="locale-switch" role="group" aria-label="Language">
     <button class="loc-btn" data-locale="en" aria-pressed="true">EN</button>
     <button class="loc-btn" data-locale="ru" aria-pressed="false">RU</button>
@@ -50,31 +50,29 @@
 <div class="mcp-modal" id="mcp-modal" role="dialog" aria-modal="true" hidden>
   <div class="mcp-modal__card">
     <button class="mcp-modal__close" id="mcp-modal-close" aria-label="Close">✕</button>
-    <h2 data-i18n="mcp.title">You're using the OpenAI agent right now.</h2>
+    <h2 data-i18n="mcp.title">You're touching MCP right now.</h2>
     <p data-i18n="mcp.body1">
-      This playground reasons with gpt-4o. The same 10 typed tools are also exposed as an
-      <strong>MCP server</strong> — point Claude Desktop or Claude Code at it and the
-      reasoning layer becomes Claude (or whatever client you use). Same tools, your LLM.
+      Every query you send here is routed by OpenAI's Responses API to our live MCP server at
+      <code>matscout.prfo.design/mcp/http/</code>. The LLM (gpt-4o) doesn't run the 10 tools
+      itself — it discovers them via MCP <code>tools/list</code>, then calls them back over HTTP.
+      Open DevTools → Network and you'll see <code>response.output_item.added</code> events
+      whose <code>type=mcp_call</code> are real round-trips to this MCP endpoint.
     </p>
     <p data-i18n="mcp.body2">
-      In Claude Desktop, drop this into <code>~/Library/Application Support/Claude/claude_desktop_config.json</code>
-      (or the equivalent on Windows / Linux), then restart Claude:
+      Want to use the same MCP server from your own Claude (Desktop or Code)? It's a remote
+      MCP — just point at the URL:
     </p>
     <pre class="mcp-modal__pre" id="mcp-config-snippet"><code>{
   "mcpServers": {
     "matscout": {
-      "command": "uvx",
-      "args": ["--from", "git+https://github.com/shorokhlev-sketch/matscout", "matscout-mcp"],
-      "env": {
-        "MP_API_KEY": "&lt;your Materials Project API key&gt;"
-      }
+      "url": "https://matscout.prfo.design/mcp/http/"
     }
   }
 }</code></pre>
     <p class="mcp-modal__small" data-i18n="mcp.body3">
-      Only <code>MP_API_KEY</code> is required for the MCP path — the MCP server doesn't
-      run gpt-4o internally; the reasoning is whatever client you connect with.
-      Source: <a href="https://github.com/shorokhlev-sketch/matscout" target="_blank" rel="noopener">github.com/shorokhlev-sketch/matscout</a>.
+      Drop into <code>~/Library/Application Support/Claude/claude_desktop_config.json</code>
+      and restart Claude. No API keys, no subprocess — it's a live network endpoint. For the
+      stdio (local subprocess) flavour, see <a href="https://github.com/shorokhlev-sketch/matscout" target="_blank" rel="noopener">github.com/shorokhlev-sketch/matscout</a>.
     </p>
     <button class="mcp-modal__copy" id="mcp-copy-btn" data-i18n="mcp.copy">Copy snippet</button>
   </div>
@@ -137,12 +135,12 @@
 // ── i18n dictionary ─────────────────────────────────────────────────────────
 const I18N = {
   en: {
-    'header.tag': 'OpenAI playground · MCP server available',
-    'header.useMcp': 'Use as MCP',
-    'mcp.title': "You're using the OpenAI agent right now.",
-    'mcp.body1': 'This playground reasons with gpt-4o. The same 10 typed tools are also exposed as an <strong>MCP server</strong> — point Claude Desktop or Claude Code at it and the reasoning layer becomes Claude (or whatever client you use). Same tools, your LLM.',
-    'mcp.body2': 'In Claude Desktop, drop this into <code>~/Library/Application Support/Claude/claude_desktop_config.json</code> (or the equivalent on Windows / Linux), then restart Claude:',
-    'mcp.body3': "Only <code>MP_API_KEY</code> is required for the MCP path — the MCP server doesn't run gpt-4o internally; the reasoning is whatever client you connect with. Source: <a href=\"https://github.com/shorokhlev-sketch/matscout\" target=\"_blank\" rel=\"noopener\">github.com/shorokhlev-sketch/matscout</a>.",
+    'header.tag': 'gpt-4o via MCP · live tools at /mcp/http/',
+    'header.useMcp': 'Use this MCP',
+    'mcp.title': "You're touching MCP right now.",
+    'mcp.body1': 'Every query you send here is routed by OpenAI\'s Responses API to our live MCP server at <code>matscout.prfo.design/mcp/http/</code>. The LLM (gpt-4o) doesn\'t run the 10 tools itself — it discovers them via MCP <code>tools/list</code>, then calls them back over HTTP. Open DevTools → Network and you\'ll see <code>response.output_item.added</code> events whose <code>type=mcp_call</code> are real round-trips to this MCP endpoint.',
+    'mcp.body2': "Want to use the same MCP server from your own Claude (Desktop or Code)? It's a remote MCP — just point at the URL:",
+    'mcp.body3': "Drop into <code>~/Library/Application Support/Claude/claude_desktop_config.json</code> and restart Claude. No API keys, no subprocess — it's a live network endpoint. For the stdio (local subprocess) flavour, see <a href=\"https://github.com/shorokhlev-sketch/matscout\" target=\"_blank\" rel=\"noopener\">github.com/shorokhlev-sketch/matscout</a>.",
     'mcp.copy': 'Copy snippet',
     'mcp.copied': 'Copied ✓',
     'left.title': 'Ask a materials question',
@@ -191,12 +189,12 @@ const I18N = {
     'startFail': 'Failed to start run',
   },
   ru: {
-    'header.tag': 'OpenAI-плейграунд · MCP-сервер доступен отдельно',
-    'header.useMcp': 'Подключить как MCP',
-    'mcp.title': 'Сейчас вы общаетесь с OpenAI-агентом.',
-    'mcp.body1': 'Этот плейграунд думает gpt-4o. Те же 10 типизированных тулов выставлены ещё и как <strong>MCP-сервер</strong> — направьте на него Claude Desktop или Claude Code, и рассуждающим слоем станет Claude (или другой ваш клиент). Те же тулы, ваш LLM.',
-    'mcp.body2': 'В Claude Desktop добавьте это в <code>~/Library/Application Support/Claude/claude_desktop_config.json</code> (или его эквивалент на Windows / Linux) и перезапустите Claude:',
-    'mcp.body3': "MCP-серверу нужен только <code>MP_API_KEY</code> — gpt-4o внутри он не вызывает, рассуждение делает ваш подключённый клиент. Исходник: <a href=\"https://github.com/shorokhlev-sketch/matscout\" target=\"_blank\" rel=\"noopener\">github.com/shorokhlev-sketch/matscout</a>.",
+    'header.tag': 'gpt-4o через MCP · живые тулы на /mcp/http/',
+    'header.useMcp': 'Подключить этот MCP',
+    'mcp.title': 'Сейчас вы реально дёргаете MCP.',
+    'mcp.body1': 'Каждый ваш запрос OpenAI Responses API маршрутизирует к нашему живому MCP-серверу на <code>matscout.prfo.design/mcp/http/</code>. LLM (gpt-4o) не исполняет 10 тулов сам — он находит их через MCP <code>tools/list</code> и вызывает по HTTP обратно к нам. Откройте DevTools → Network: события <code>response.output_item.added</code> с <code>type=mcp_call</code> — это реальные round-trip\'ы к этому endpoint\'у.',
+    'mcp.body2': 'Хотите использовать тот же MCP-сервер из своего Claude (Desktop или Code)? Это remote MCP — просто укажите URL:',
+    'mcp.body3': "Положите в <code>~/Library/Application Support/Claude/claude_desktop_config.json</code> и перезапустите Claude. Никаких API-ключей, никакого subprocess — это сетевой endpoint. Для stdio-варианта (локальный subprocess) — <a href=\"https://github.com/shorokhlev-sketch/matscout\" target=\"_blank\" rel=\"noopener\">github.com/shorokhlev-sketch/matscout</a>.",
     'mcp.copy': 'Скопировать сниппет',
     'mcp.copied': 'Скопировано ✓',
     'left.title': 'Задайте вопрос о материалах',

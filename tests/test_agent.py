@@ -1,22 +1,39 @@
-"""Agent loop unit tests — exercise the dispatcher + trace without OpenAI.
+"""Agent loop unit tests — DEPRECATED.
 
-We script the OpenAI client's responses with simple fakes; the model
-itself is irrelevant here. Live evaluation of self-correction quality
-lives in tests/eval/ (next step).
+These tests were written against the chat.completions function-calling
+runner, where the Python loop dispatched each tool itself and we could
+script ``client.chat.completions.create`` with a queue of fake messages.
+
+The agent now runs via OpenAI's Responses API with a remote MCP tool —
+tool dispatch happens inside OpenAI's infrastructure, and we observe a
+stream of typed events (``response.output_item.added`` /
+``.mcp_call.completed`` / ``response.output_text.delta`` / ...) coming
+back. Mocking that surface is significantly more work than re-running
+the agent against the live prod MCP endpoint, which is what the eval
+suite already does (see ``tests/eval/``). The whole module is skipped
+here; if and when we need offline coverage for the new path we can
+build a Responses-shaped fake.
 """
 
 from __future__ import annotations
 
-import json
-from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any
-
 import pytest
 
-from matscout.agent.runner import run_agent
-from matscout.cache import Cache
-from matscout.tools._client import set_cache, set_client
+pytestmark = pytest.mark.skip(
+    reason=(
+        "Tests target the deprecated chat.completions runner. "
+        "Live coverage of the new Responses+MCP path lives under tests/eval/."
+    )
+)
+
+import json  # noqa: E402
+from dataclasses import dataclass, field  # noqa: E402
+from pathlib import Path  # noqa: E402
+from typing import Any  # noqa: E402
+
+from matscout.agent.runner import run_agent  # noqa: E402
+from matscout.cache import Cache  # noqa: E402
+from matscout.tools._client import set_cache, set_client  # noqa: E402
 
 # ── fake OpenAI client ───────────────────────────────────────────────────────
 
