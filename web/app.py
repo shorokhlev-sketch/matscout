@@ -100,7 +100,14 @@ async def _stream(query: str) -> AsyncIterator[dict[str, Any]]:
 
 @app.post("/api/query")
 async def query(req: QueryRequest) -> EventSourceResponse:
-    return EventSourceResponse(_stream(req.query))
+    return EventSourceResponse(
+        _stream(req.query),
+        headers={
+            # Tell nginx/proxies not to buffer this response.
+            "X-Accel-Buffering": "no",
+            "Cache-Control": "no-cache, no-transform",
+        },
+    )
 
 
 # Mount the SPA at the root. /api/* still wins because FastAPI matches
