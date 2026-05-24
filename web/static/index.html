@@ -98,6 +98,11 @@ const I18N = {
     'right.citeBtn': 'Cite (BibTeX) ↓',
     'right.references': 'References',
     'right.refsCaption': 'Materials Project entries referenced in this run. Each link opens the canonical MP page.',
+    'right.provenance': 'Provenance',
+    'right.provModel': 'Model',
+    'right.provCommit': 'matscout',
+    'right.provMP': 'Data source',
+    'right.provBuilt': 'Snapshot built',
     'share.copied': 'Link copied — paste it into your notes / footnote.',
     'share.failed': 'Could not copy. Select the URL manually:',
     'snapshot.banner': 'Viewing a saved research snapshot.',
@@ -140,6 +145,11 @@ const I18N = {
     'right.citeBtn': 'Цитата (BibTeX) ↓',
     'right.references': 'Источники',
     'right.refsCaption': 'Записи Materials Project, использованные в этом исследовании. Каждая ссылка открывает каноническую MP-страницу.',
+    'right.provenance': 'Метаданные',
+    'right.provModel': 'Модель',
+    'right.provCommit': 'matscout',
+    'right.provMP': 'Источник данных',
+    'right.provBuilt': 'Снимок собран',
     'share.copied': 'Ссылка скопирована — вставьте в заметки / сноску.',
     'share.failed': 'Не получилось скопировать. Выделите ссылку вручную:',
     'snapshot.banner': 'Открыт сохранённый снимок исследования.',
@@ -496,40 +506,71 @@ function enrichAnswerWithMpLinks() {
 
 async function renderReferences(rid) {
   try {
-    const r = await fetch(`/api/research/${rid}/materials`);
-    if (!r.ok) return;
-    const data = await r.json();
-    if (!data.materials.length) return;
-    const old = document.querySelector('.references-block');
-    if (old) old.remove();
-    const wrap = document.createElement('section');
-    wrap.className = 'references-block';
-    const h = document.createElement('h3');
-    h.textContent = t('right.references') + ` (${data.materials.length})`;
-    const p = document.createElement('p');
-    p.className = 'references-caption';
-    p.textContent = t('right.refsCaption');
-    const ul = document.createElement('ul');
-    for (const m of data.materials) {
-      const li = document.createElement('li');
-      const a = document.createElement('a');
-      a.href = m.url;
-      a.target = '_blank';
-      a.rel = 'noopener';
-      a.textContent = m.material_id;
-      li.appendChild(a);
-      li.appendChild(document.createTextNode(' · '));
-      const small = document.createElement('span');
-      small.className = 'ref-host';
-      small.textContent = 'materialsproject.org';
-      li.appendChild(small);
-      ul.appendChild(li);
+    const [mats, snap] = await Promise.all([
+      fetch(`/api/research/${rid}/materials`).then(r => r.ok ? r.json() : null),
+      fetch(`/api/research/${rid}`).then(r => r.ok ? r.json() : null),
+    ]);
+
+    // References block (mp-ids → MP pages)
+    if (mats && mats.materials.length) {
+      document.querySelector('.references-block')?.remove();
+      const wrap = document.createElement('section');
+      wrap.className = 'references-block';
+      const h = document.createElement('h3');
+      h.textContent = t('right.references') + ` (${mats.materials.length})`;
+      const p = document.createElement('p');
+      p.className = 'references-caption';
+      p.textContent = t('right.refsCaption');
+      const ul = document.createElement('ul');
+      for (const m of mats.materials) {
+        const li = document.createElement('li');
+        const a = document.createElement('a');
+        a.href = m.url;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        a.textContent = m.material_id;
+        li.appendChild(a);
+        li.appendChild(document.createTextNode(' · '));
+        const small = document.createElement('span');
+        small.className = 'ref-host';
+        small.textContent = 'materialsproject.org';
+        li.appendChild(small);
+        ul.appendChild(li);
+      }
+      wrap.appendChild(h);
+      wrap.appendChild(p);
+      wrap.appendChild(ul);
+      answerEl.parentNode.appendChild(wrap);
     }
-    wrap.appendChild(h);
-    wrap.appendChild(p);
-    wrap.appendChild(ul);
-    answerEl.parentNode.appendChild(wrap);
-  } catch { /* non-fatal — references are a nice-to-have */ }
+
+    // Provenance block — only available after the run is fully done
+    if (snap && snap.metadata && Object.keys(snap.metadata).length) {
+      document.querySelector('.provenance-block')?.remove();
+      const md = snap.metadata;
+      const wrap = document.createElement('section');
+      wrap.className = 'provenance-block mono';
+      const h = document.createElement('h3');
+      h.textContent = t('right.provenance');
+      const dl = document.createElement('dl');
+      const rows = [
+        [t('right.provModel'), md.model || 'gpt-4o'],
+        [t('right.provCommit'), `v${md.matscout_version} · ${md.matscout_commit}`],
+        [t('right.provMP'), md.mp_data_source + ' · CC-BY 4.0'],
+        [t('right.provBuilt'), md.snapshot_built_at],
+      ];
+      for (const [k, v] of rows) {
+        const dt = document.createElement('dt');
+        dt.textContent = k;
+        const dd = document.createElement('dd');
+        dd.textContent = v;
+        dl.appendChild(dt);
+        dl.appendChild(dd);
+      }
+      wrap.appendChild(h);
+      wrap.appendChild(dl);
+      answerEl.parentNode.appendChild(wrap);
+    }
+  } catch { /* non-fatal — references and provenance are nice-to-haves */ }
 }
 
 $('#share-btn').addEventListener('click', async () => {

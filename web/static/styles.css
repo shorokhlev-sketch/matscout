@@ -432,6 +432,41 @@ button.ghost { background: transparent; color: var(--fg-3); }
   color: var(--fg-4);
 }
 
+/* Provenance block — sits below references, same visual weight, tabular layout */
+.provenance-block {
+  margin-top: 14px;
+  padding: 14px 18px;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: var(--rad-lg);
+  font-size: 11px;
+}
+.provenance-block h3 {
+  margin: 0 0 10px;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--fg-3);
+}
+.provenance-block dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 14px;
+}
+.provenance-block dt {
+  color: var(--fg-4);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.provenance-block dd {
+  margin: 0;
+  color: var(--fg-2);
+  font-size: 11px;
+}
+
 #answer {
   margin-top: 14px;
   padding: 18px 20px;

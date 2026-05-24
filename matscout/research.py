@@ -33,10 +33,14 @@ CREATE TABLE IF NOT EXISTS research (
     status      TEXT NOT NULL,
     started_at  INTEGER NOT NULL,
     finished_at INTEGER,
-    final_answer TEXT
+    final_answer TEXT,
+    metadata_json TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_research_started ON research(started_at);
 """
+
+# Pragmatic migration — older deployments don't have metadata_json yet.
+_MIGRATIONS = ("ALTER TABLE research ADD COLUMN metadata_json TEXT",)
 
 
 class ResearchStore:
@@ -47,6 +51,11 @@ class ResearchStore:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         with self._conn() as c:
             c.executescript(_SCHEMA)
+            for stmt in _MIGRATIONS:
+                try:
+                    c.execute(stmt)
+                except sqlite3.OperationalError:
+                    pass  # already applied
 
     @contextmanager
     def _conn(self) -> Iterator[sqlite3.Connection]:
@@ -69,6 +78,7 @@ class ResearchStore:
         status: str,
         started_at: float,
         finished_at: float | None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """Upsert a run. Safe to call repeatedly as events accumulate."""
         final_answer: str | None = None
@@ -82,13 +92,14 @@ class ResearchStore:
                 """
                 INSERT INTO research (
                     request_id, query, locale, events_json,
-                    status, started_at, finished_at, final_answer
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    status, started_at, finished_at, final_answer, metadata_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(request_id) DO UPDATE SET
-                    events_json  = excluded.events_json,
-                    status       = excluded.status,
-                    finished_at  = excluded.finished_at,
-                    final_answer = excluded.final_answer
+                    events_json   = excluded.events_json,
+                    status        = excluded.status,
+                    finished_at   = excluded.finished_at,
+                    final_answer  = excluded.final_answer,
+                    metadata_json = excluded.metadata_json
                 """,
                 (
                     request_id,
@@ -99,6 +110,7 @@ class ResearchStore:
                     int(started_at),
                     int(finished_at) if finished_at is not None else None,
                     final_answer,
+                    json.dumps(metadata, default=str) if metadata is not None else None,
                 ),
             )
 
@@ -107,13 +119,14 @@ class ResearchStore:
             row = c.execute(
                 """
                 SELECT request_id, query, locale, events_json, status,
-                       started_at, finished_at, final_answer
+                       started_at, finished_at, final_answer, metadata_json
                 FROM research WHERE request_id = ?
                 """,
                 (request_id,),
             ).fetchone()
         if row is None:
             return None
+        meta_raw = row[8] if len(row) > 8 else None
         return {
             "request_id": row[0],
             "query": row[1],
@@ -123,6 +136,7 @@ class ResearchStore:
             "started_at": row[5],
             "finished_at": row[6],
             "final_answer": row[7],
+            "metadata": json.loads(meta_raw) if meta_raw else {},
         }
 
     def recent(self, limit: int = 20) -> list[dict[str, Any]]:

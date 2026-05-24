@@ -29,6 +29,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from matscout.agent.runner import TraceEvent, stream_agent
+from matscout.provenance import build_metadata
 from matscout.research import extract_material_ids, get_store, to_bibtex
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -107,8 +108,12 @@ def _event_payload(ev: TraceEvent) -> dict[str, Any]:
     return payload
 
 
-def _persist(run: Run) -> None:
-    """Append the current run state to the on-disk research journal."""
+def _persist(run: Run, *, include_metadata: bool = False) -> None:
+    """Append the current run state to the on-disk research journal.
+
+    Provenance metadata is attached at the end of a run (it's stable across
+    a single execution; no point computing it on every event).
+    """
     try:
         get_store().save(
             request_id=run.request_id,
@@ -118,6 +123,7 @@ def _persist(run: Run) -> None:
             status=run.status,
             started_at=run.started_at,
             finished_at=run.finished_at,
+            metadata=build_metadata() if include_metadata else None,
         )
     except Exception:
         # Never let storage failures crash an in-flight agent loop.
@@ -161,7 +167,7 @@ async def _drive_run(run: Run) -> None:
         run.status = "done"
     finally:
         run.finished_at = time.time()
-        _persist(run)
+        _persist(run, include_metadata=True)
 
 
 async def _gc_old_runs() -> None:
