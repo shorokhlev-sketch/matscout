@@ -595,7 +595,131 @@ function renderPhaseDiagramSVG(viz) {
     );
     if (binary.length >= 2) return renderBinaryHullSVG(viz, els, binary);
   }
+  if (els.length === 3) {
+    const tern = viz.points.filter(p =>
+      p.composition &&
+      typeof p.composition[els[0]] === 'number' &&
+      typeof p.composition[els[1]] === 'number' &&
+      typeof p.composition[els[2]] === 'number'
+    );
+    if (tern.length >= 3) return renderTernaryTriangleSVG(viz, els, tern);
+  }
   return renderScatterSVG(viz);
+}
+
+/**
+ * Ternary phase diagram as a Gibbs triangle (barycentric projection).
+ *
+ * Each pure-element composition sits at one vertex; mixed compositions
+ * map inside the triangle by their mole fractions. Stable phases (on
+ * the convex hull) are filled amber dots; metastable ones are smaller
+ * open dots whose grey level scales with distance above the hull.
+ *
+ * Why this instead of a scatter: ternary thermodynamics is defined on
+ * the 2-simplex (mole fractions sum to 1), so the natural visual is a
+ * triangle, not a Cartesian plot. The scatter version misrepresented
+ * three independent compositions as two correlated axes.
+ */
+function renderTernaryTriangleSVG(viz, els, pts) {
+  const W = 460, H = 380;
+  const M = { top: 24, right: 32, bottom: 30, left: 32 };
+  const innerW = W - M.left - M.right;
+  const innerH = H - M.top - M.bottom;
+  // Equilateral triangle bounding box: side s so the height is innerH-ish.
+  const s = Math.min(innerW, innerH / (Math.sqrt(3) / 2));
+  const trH = s * Math.sqrt(3) / 2;
+  const cx = M.left + innerW / 2;
+  const apexY = M.top + (innerH - trH) / 2;
+  // Vertices: A at top apex (els[0]), B at bottom-left (els[1]), C at bottom-right (els[2]).
+  const vA = { x: cx,             y: apexY };
+  const vB = { x: cx - s / 2,     y: apexY + trH };
+  const vC = { x: cx + s / 2,     y: apexY + trH };
+
+  const toXY = (fA, fB, fC) => ({
+    x: vA.x * fA + vB.x * fB + vC.x * fC,
+    y: vA.y * fA + vB.y * fB + vC.y * fC,
+  });
+
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('class', 'phase-diagram');
+
+  // Triangle outline + faint internal grid (every 25% along each edge)
+  const line = (x1, y1, x2, y2, opts = {}) => {
+    const ln = document.createElementNS(ns, 'line');
+    ln.setAttribute('x1', x1); ln.setAttribute('y1', y1);
+    ln.setAttribute('x2', x2); ln.setAttribute('y2', y2);
+    ln.setAttribute('stroke', opts.stroke || 'rgba(255,255,255,0.18)');
+    ln.setAttribute('stroke-width', opts.width || '1');
+    if (opts.dash) ln.setAttribute('stroke-dasharray', opts.dash);
+    return ln;
+  };
+  svg.appendChild(line(vA.x, vA.y, vB.x, vB.y));
+  svg.appendChild(line(vB.x, vB.y, vC.x, vC.y));
+  svg.appendChild(line(vC.x, vC.y, vA.x, vA.y));
+  for (let f = 0.25; f < 1; f += 0.25) {
+    // Lines parallel to each edge at composition f
+    const a1 = toXY(1 - f, f, 0);
+    const a2 = toXY(1 - f, 0, f);
+    const b1 = toXY(0, 1 - f, f);
+    const b2 = toXY(f, 1 - f, 0);
+    const c1 = toXY(f, 0, 1 - f);
+    const c2 = toXY(0, f, 1 - f);
+    const grid = { stroke: 'rgba(255,255,255,0.06)', dash: '2 3' };
+    svg.appendChild(line(a1.x, a1.y, a2.x, a2.y, grid));
+    svg.appendChild(line(b1.x, b1.y, b2.x, b2.y, grid));
+    svg.appendChild(line(c1.x, c1.y, c2.x, c2.y, grid));
+  }
+
+  // Plot points
+  const txt = (x, y, str, cls) => {
+    const t = document.createElementNS(ns, 'text');
+    t.setAttribute('x', x); t.setAttribute('y', y); t.setAttribute('class', cls);
+    t.textContent = str;
+    return t;
+  };
+
+  for (const p of pts) {
+    const fA = p.composition[els[0]];
+    const fB = p.composition[els[1]];
+    const fC = p.composition[els[2]];
+    const { x, y } = toXY(fA, fB, fC);
+    const isStable = (p.energy_above_hull || 0) < 1e-9;
+    const c = document.createElementNS(ns, 'circle');
+    c.setAttribute('cx', x);
+    c.setAttribute('cy', y);
+    c.setAttribute('r', isStable ? 5 : 2.8);
+    c.setAttribute('class', isStable ? 'pt stable' : 'pt metastable');
+    const tt = document.createElementNS(ns, 'title');
+    tt.textContent =
+      `${p.material_id || ''}  ${p.formula || ''}\n` +
+      `${els[0]}=${(fA * 100).toFixed(1)}%  ${els[1]}=${(fB * 100).toFixed(1)}%  ${els[2]}=${(fC * 100).toFixed(1)}%\n` +
+      `E above hull = ${((p.energy_above_hull || 0) * 1000).toFixed(1)} meV/atom` +
+      (isStable ? ' (on hull)' : '');
+    c.appendChild(tt);
+    if (p.material_id) {
+      const a = document.createElementNS(ns, 'a');
+      a.setAttribute('href', `https://next-gen.materialsproject.org/materials/${p.material_id}`);
+      a.setAttribute('target', '_blank'); a.setAttribute('rel', 'noopener');
+      a.appendChild(c);
+      svg.appendChild(a);
+    } else {
+      svg.appendChild(c);
+    }
+  }
+
+  // Vertex labels
+  svg.appendChild(txt(vA.x, vA.y - 8, els[0], 'tern-vertex'));
+  svg.appendChild(txt(vB.x - 4, vB.y + 16, els[1], 'tern-vertex-left'));
+  svg.appendChild(txt(vC.x + 4, vC.y + 16, els[2], 'tern-vertex-right'));
+
+  // Title chip
+  svg.appendChild(txt(M.left, M.top - 8,
+    `${viz.chemsys}  ·  ternary  ·  ${viz.n_stable} on hull / ${viz.n_metastable} metastable (full set)`,
+    'chart-title'));
+
+  return svg;
 }
 
 /**

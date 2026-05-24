@@ -508,6 +508,9 @@ svg.phase-diagram .legend-label  { fill: var(--fg-3); font-size: 9px; font-famil
 svg.phase-diagram .tick-label-left  { fill: var(--fg-2); font-size: 10px; font-family: var(--mono); text-anchor: start; }
 svg.phase-diagram .tick-label-right { fill: var(--fg-2); font-size: 10px; font-family: var(--mono); text-anchor: end; }
 svg.phase-diagram .unary-label      { fill: var(--fg-3); font-size: 9.5px; font-family: var(--mono); }
+svg.phase-diagram .tern-vertex        { fill: var(--acc); font-size: 13px; font-family: var(--mono); font-weight: 700; text-anchor: middle; }
+svg.phase-diagram .tern-vertex-left   { fill: var(--acc); font-size: 13px; font-family: var(--mono); font-weight: 700; text-anchor: end; }
+svg.phase-diagram .tern-vertex-right  { fill: var(--acc); font-size: 13px; font-family: var(--mono); font-weight: 700; text-anchor: start; }
 
 /* References block beneath the answer */
 .references-block {

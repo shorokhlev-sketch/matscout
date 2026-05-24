@@ -74,12 +74,12 @@ def _phase_diagram_viz(result: dict[str, Any]) -> dict[str, Any]:
                 pt["composition"] = {el: comp.get(el, 0) / total for el in elements}
             points.append(pt)
 
-    # For the visualisation, collapse polymorphs that share a composition to
-    # a single lowest-energy representative. A binary hull plot draws one
-    # point per composition (the lowest-energy polymorph anchors the hull;
-    # higher polymorphs would just stack on the same x). The full polymorph
-    # list still goes to the LLM via the un-trimmed tool result.
-    if len(elements) == 2:
+    # For the visualisation, collapse polymorphs that share a composition
+    # to a single lowest-energy representative. Applies to binary AND
+    # ternary chemsys — both project to a 2-D plot where two polymorphs
+    # of the same formula sit at exactly the same point. The full
+    # polymorph list still goes to the LLM via the un-trimmed tool result.
+    if len(elements) in (2, 3):
         by_comp: dict[tuple[float, ...], dict[str, Any]] = {}
         for p in points:
             p_comp = p.get("composition")
@@ -90,9 +90,13 @@ def _phase_diagram_viz(result: dict[str, Any]) -> dict[str, Any]:
             cur = by_comp.get(key)
             if cur is None or fe < cur["formation_energy_per_atom"]:
                 by_comp[key] = p
+        # Sort: binary by mole fraction of the second element, ternary
+        # by the first element's mole fraction (stable order for any
+        # tooltip / inspector). The actual plot positions are geometric.
+        sort_key_el = elements[1] if len(elements) >= 2 else elements[0]
         viz_points = sorted(
             by_comp.values(),
-            key=lambda p: p["composition"].get(elements[1], 0.0),
+            key=lambda p: p["composition"].get(sort_key_el, 0.0),
         )
     else:
         viz_points = points
