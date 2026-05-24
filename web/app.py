@@ -34,6 +34,69 @@ from matscout.provenance import build_metadata
 from matscout.research import extract_material_ids, get_store, to_bibtex
 from matscout.tool_facades import get_structure as _get_structure_facade
 
+
+def _phase_diagram_viz(result: dict[str, Any]) -> dict[str, Any]:
+    """Trim a get_phase_diagram / get_competing_phases result to chart fodder.
+
+    For binary chemsys we also compute the mole fraction of the *second* element
+    (so the X axis can be a proper composition slider 0..1 in the browser).
+    For unary/ternary/higher we just hand back scatter coordinates; the
+    browser decides which projection to draw.
+    """
+    chemsys_str: str = result.get("chemsys") or result.get("anchor_formula") or ""
+    # Sorted, canonical element order — same as MP's chemsys formatting.
+    elements: list[str] = sorted({el for el in chemsys_str.replace(",", "-").split("-") if el})
+
+    points: list[dict[str, Any]] = []
+    for is_stable, src_key in ((True, "stable_phases"), (False, "metastable_phases")):
+        for p in result.get(src_key, []) or []:
+            fe = p.get("formation_energy_per_atom")
+            eah = p.get("energy_above_hull")
+            if fe is None and eah is None:
+                continue
+            pt: dict[str, Any] = {
+                "material_id": p.get("material_id", ""),
+                "formula": p.get("formula_pretty", ""),
+                "formation_energy_per_atom": fe,
+                "energy_above_hull": eah,
+                "is_stable": bool(is_stable),
+            }
+            # Composition: number of atoms of each element / total atoms.
+            # For binary, the browser will use this for the convex-hull plot.
+            comp = _parse_composition(p.get("formula", "") or p.get("formula_pretty", ""))
+            if comp and elements:
+                total = sum(comp.values()) or 1
+                pt["composition"] = {el: comp.get(el, 0) / total for el in elements}
+            points.append(pt)
+
+    return {
+        "chemsys": chemsys_str,
+        "elements": elements,
+        "n_stable": result.get("n_stable") or 0,
+        "n_metastable": result.get("n_metastable") or 0,
+        "points": points,
+    }
+
+
+def _parse_composition(formula: str) -> dict[str, int]:
+    """Tiny pure-Python formula parser: 'Li2FeO4' -> {Li:2, Fe:1, O:4}.
+
+    Good enough for the pretty formulas MP returns (single-letter or
+    two-letter element symbols, optional integer subscripts, no
+    parentheses). Returns {} when we can't make sense of it.
+    """
+    import re
+
+    if not formula:
+        return {}
+    out: dict[str, int] = {}
+    for el, n in re.findall(r"([A-Z][a-z]?)(\d*)", formula):
+        if not el:
+            continue
+        out[el] = out.get(el, 0) + (int(n) if n else 1)
+    return out
+
+
 STATIC_DIR = Path(__file__).parent / "static"
 RUN_TTL_SECONDS = 600  # how long we keep a finished run around for late pollers
 MAX_CONCURRENT_RUNS = 8
@@ -86,6 +149,10 @@ def _event_payload(ev: TraceEvent) -> dict[str, Any]:
     if ev.turn is not None:
         payload["turn"] = ev.turn
     if ev.result is not None:
+        # For phase-diagram tools, embed a compact `viz` payload so the
+        # browser can render an inline SVG chart without re-fetching.
+        if ev.name in ("get_phase_diagram", "get_competing_phases") and isinstance(ev.result, dict):
+            payload["viz"] = _phase_diagram_viz(ev.result)
         if isinstance(ev.result, list):
             preview: list[str] = []
             for item in ev.result[:3]:

@@ -397,6 +397,49 @@ button.ghost { background: transparent; color: var(--fg-3); }
   color: var(--acc);
   border-color: var(--acc);
 }
+/* 3D-view chip — same visual weight as the CIF chip but distinct hover */
+#answer .view-link {
+  font-family: var(--mono);
+  font-size: 0.7em;
+  color: var(--fg-3);
+  background: transparent;
+  text-decoration: none;
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  vertical-align: 0.1em;
+  cursor: pointer;
+  transition: color .12s, border-color .12s;
+}
+#answer .view-link:hover,
+#answer .view-link.on { color: var(--acc); border-color: var(--acc); }
+#answer .view-link:disabled { opacity: 0.5; cursor: progress; }
+#answer .crystal-viewer canvas { border-radius: var(--rad-lg); }
+
+/* Inline phase-diagram visualisation (under a get_phase_diagram tool_result row) */
+.viz-holder {
+  grid-column: 1 / -1;
+  padding: 8px 0 4px 28px;
+}
+svg.phase-diagram {
+  width: 100%;
+  max-width: 460px;
+  height: auto;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--rad-lg);
+  display: block;
+  padding: 4px;
+}
+svg.phase-diagram .pt.stable     { fill: var(--acc); stroke: var(--acc-2); stroke-width: 0.6; cursor: pointer; }
+svg.phase-diagram .pt.metastable { fill: none; stroke: var(--fg-3); stroke-width: 1.1; cursor: pointer; }
+svg.phase-diagram .pt:hover      { stroke: var(--acc-2); stroke-width: 1.6; }
+svg.phase-diagram .axis-label    { fill: var(--fg-3); font-size: 9.5px; font-family: var(--sans); text-anchor: middle; }
+svg.phase-diagram .tick-label    { fill: var(--fg-4); font-size: 9px; font-family: var(--mono); text-anchor: end; }
+svg.phase-diagram .chart-title   { fill: var(--fg-2); font-size: 9.5px; letter-spacing: 0.06em; font-family: var(--mono); text-transform: uppercase; }
+svg.phase-diagram .legend-label  { fill: var(--fg-3); font-size: 9px; font-family: var(--mono); }
+svg.phase-diagram .tick-label-left  { fill: var(--fg-2); font-size: 10px; font-family: var(--mono); text-anchor: start; }
+svg.phase-diagram .tick-label-right { fill: var(--fg-2); font-size: 10px; font-family: var(--mono); text-anchor: end; }
 
 /* References block beneath the answer */
 .references-block {

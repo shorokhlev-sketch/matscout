@@ -10,6 +10,23 @@
 <link rel="stylesheet" href="/static/styles.css">
 <!-- Minimal markdown render — covers code, headers, tables, lists -->
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<!-- 3D crystal viewer — loaded lazily once any mp-id renders. Tiny stub
+     keeps initial page weight low; the real lib is fetched on demand. -->
+<script>
+  window._3DmolReady = null;
+  function load3Dmol() {
+    if (window.$3Dmol) return Promise.resolve();
+    if (window._3DmolReady) return window._3DmolReady;
+    window._3DmolReady = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://3Dmol.org/build/3Dmol-min.js';
+      s.onload = () => resolve();
+      s.onerror = () => reject(new Error('failed to load 3Dmol.js'));
+      document.head.appendChild(s);
+    });
+    return window._3DmolReady;
+  }
+</script>
 </head>
 <body>
 
@@ -371,6 +388,350 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+/**
+ * Toggle a 3D crystal viewer inline after the clicked '◊ 3D' button.
+ * First click loads 3Dmol.js from CDN, fetches the CIF, instantiates the
+ * viewer. Subsequent clicks just hide/show the existing container.
+ */
+async function toggleCrystalViewer(btn, materialId) {
+  const existing = btn.nextElementSibling;
+  if (existing && existing.classList?.contains('crystal-viewer')) {
+    existing.remove();
+    btn.classList.remove('on');
+    return;
+  }
+  btn.classList.add('on');
+  btn.disabled = true;
+  const holder = document.createElement('span');
+  holder.className = 'crystal-viewer';
+  holder.style.cssText =
+    'display:inline-block;vertical-align:top;width:320px;height:320px;' +
+    'margin:6px 0 6px 6px;background:var(--bg);border:1px solid var(--border);' +
+    'border-radius:var(--rad-lg);position:relative;';
+  holder.innerHTML =
+    '<div class="cv-status mono" style="position:absolute;inset:0;display:flex;' +
+    'align-items:center;justify-content:center;color:var(--fg-3);font-size:10px;">' +
+    'loading 3D viewer…</div>';
+  btn.parentNode.insertBefore(holder, btn.nextSibling);
+
+  try {
+    await load3Dmol();
+    const r = await fetch(`/api/structure/${materialId}.cif`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const cif = await r.text();
+
+    holder.querySelector('.cv-status').remove();
+    const inner = document.createElement('div');
+    inner.style.cssText = 'width:100%;height:100%;position:relative;';
+    holder.appendChild(inner);
+
+    const viewer = window.$3Dmol.createViewer(inner, {
+      backgroundColor: '#08080a',
+      antialias: true,
+    });
+    viewer.addModel(cif, 'cif');
+    // Ball-and-stick with unit cell box
+    viewer.setStyle({}, { sphere: { scale: 0.3, colorscheme: 'Jmol' }, stick: { radius: 0.13 } });
+    viewer.addUnitCell();
+    viewer.zoomTo();
+    viewer.zoom(1.15);
+    viewer.render();
+    viewer.spin('y', 0.4);  // slow auto-rotation; user can grab to override
+
+    // Tiny caption with material id
+    const caption = document.createElement('div');
+    caption.className = 'cv-caption mono';
+    caption.style.cssText =
+      'position:absolute;bottom:6px;left:10px;color:var(--fg-3);font-size:9.5px;' +
+      'letter-spacing:0.08em;pointer-events:none;text-shadow:0 0 4px var(--bg);';
+    caption.textContent = `${materialId} · drag to rotate · scroll to zoom`;
+    holder.appendChild(caption);
+  } catch (e) {
+    holder.querySelector('.cv-status').textContent = `viewer error: ${e.message}`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+/**
+ * Render a phase-diagram visualisation as inline SVG.
+ * Switches projection based on the number of elements in the chemsys:
+ *
+ *   1 element  → tiny indicator (rare case, one composition point).
+ *   2 elements → proper convex-hull plot: x = mole fraction of element-2,
+ *                y = formation energy per atom. Stable points are joined
+ *                by the convex hull line; off-hull points float above.
+ *   3+ elements → fall back to scatter (formation energy × E above hull),
+ *                same as before. Ternary projection is a future K2 polish.
+ */
+function renderPhaseDiagramSVG(viz) {
+  if (!viz || !Array.isArray(viz.points) || viz.points.length === 0) return null;
+  const els = Array.isArray(viz.elements) ? viz.elements : [];
+  if (els.length === 2) {
+    const binary = viz.points.filter(p =>
+      p.composition && typeof p.composition[els[1]] === 'number' &&
+      typeof p.formation_energy_per_atom === 'number'
+    );
+    if (binary.length >= 2) return renderBinaryHullSVG(viz, els, binary);
+  }
+  return renderScatterSVG(viz);
+}
+
+/** Binary convex-hull plot — what people actually expect from "phase diagram". */
+function renderBinaryHullSVG(viz, els, pts) {
+  const W = 460, H = 240;
+  const M = { top: 22, right: 18, bottom: 42, left: 56 };
+  const innerW = W - M.left - M.right;
+  const innerH = H - M.top - M.bottom;
+
+  const fes = pts.map(p => p.formation_energy_per_atom);
+  const yMin = Math.min(0, Math.min(...fes));
+  const yMax = Math.max(0, Math.max(...fes));
+  const yPad = Math.max(0.05, (yMax - yMin) * 0.08);
+  const sx = x => M.left + x * innerW;  // x is mole fraction 0..1
+  const sy = y => M.top + innerH - ((y - (yMin - yPad)) / ((yMax + yPad) - (yMin - yPad))) * innerH;
+
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('class', 'phase-diagram');
+
+  // Axes
+  const line = (x1, y1, x2, y2, opts = {}) => {
+    const ln = document.createElementNS(ns, 'line');
+    ln.setAttribute('x1', x1); ln.setAttribute('y1', y1);
+    ln.setAttribute('x2', x2); ln.setAttribute('y2', y2);
+    ln.setAttribute('stroke', opts.stroke || 'rgba(255,255,255,0.18)');
+    ln.setAttribute('stroke-width', opts.width || '1');
+    if (opts.dash) ln.setAttribute('stroke-dasharray', opts.dash);
+    if (opts.opacity != null) ln.setAttribute('opacity', opts.opacity);
+    return ln;
+  };
+  svg.appendChild(line(M.left, M.top, M.left, M.top + innerH));
+  svg.appendChild(line(M.left, M.top + innerH, M.left + innerW, M.top + innerH));
+  // 0-formation-energy guideline (= elemental references)
+  svg.appendChild(line(M.left, sy(0), M.left + innerW, sy(0),
+    { stroke: 'rgba(255,255,255,0.10)', dash: '3 4' }));
+
+  // Build the lower convex hull on (composition.x, formation_energy_per_atom)
+  // along with the two elemental endpoints fixed at (0, 0) and (1, 0).
+  const hullInput = [
+    { x: 0, y: 0, anchor: els[0], _virtual: true },
+    { x: 1, y: 0, anchor: els[1], _virtual: true },
+    ...pts.map(p => ({
+      x: p.composition[els[1]],
+      y: p.formation_energy_per_atom,
+      p,
+    })),
+  ];
+  const hull = lowerConvexHull(hullInput);
+
+  // Hull line
+  const hullPath = document.createElementNS(ns, 'polyline');
+  hullPath.setAttribute('fill', 'none');
+  hullPath.setAttribute('stroke', '#f59e0b');
+  hullPath.setAttribute('stroke-width', '1.4');
+  hullPath.setAttribute('stroke-opacity', '0.8');
+  hullPath.setAttribute('points', hull.map(h => `${sx(h.x)},${sy(h.y)}`).join(' '));
+  svg.appendChild(hullPath);
+
+  // Plot all points (real ones — virtual endpoints aren't drawn as dots)
+  const onHullSet = new Set(hull.filter(h => h.p).map(h => h.p));
+  for (const p of pts) {
+    const onHull = onHullSet.has(p) || (p.is_stable && Math.abs(p.formation_energy_per_atom) < 1e9);
+    const cx = sx(p.composition[els[1]]);
+    const cy = sy(p.formation_energy_per_atom);
+    const c = document.createElementNS(ns, 'circle');
+    c.setAttribute('cx', cx); c.setAttribute('cy', cy);
+    c.setAttribute('r', p.is_stable ? 4.6 : 3.2);
+    c.setAttribute('class', p.is_stable ? 'pt stable' : 'pt metastable');
+    const tt = document.createElementNS(ns, 'title');
+    tt.textContent =
+      `${p.material_id || ''}  ${p.formula || ''}\n` +
+      `x(${els[1]}) = ${p.composition[els[1]].toFixed(3)}\n` +
+      `formation E = ${p.formation_energy_per_atom.toFixed(3)} eV/atom` +
+      (p.is_stable ? ' (on hull)' : '');
+    c.appendChild(tt);
+    if (p.material_id) {
+      const a = document.createElementNS(ns, 'a');
+      a.setAttribute('href', `https://next-gen.materialsproject.org/materials/${p.material_id}`);
+      a.setAttribute('target', '_blank'); a.setAttribute('rel', 'noopener');
+      a.appendChild(c);
+      svg.appendChild(a);
+    } else {
+      svg.appendChild(c);
+    }
+  }
+
+  // Labels
+  const txt = (x, y, str, cls) => {
+    const t = document.createElementNS(ns, 'text');
+    t.setAttribute('x', x); t.setAttribute('y', y); t.setAttribute('class', cls);
+    t.textContent = str;
+    return t;
+  };
+  // X-axis endpoint labels
+  svg.appendChild(txt(M.left, M.top + innerH + 16, els[0], 'tick-label-left'));
+  svg.appendChild(txt(M.left + innerW, M.top + innerH + 16, els[1], 'tick-label-right'));
+  svg.appendChild(txt(M.left + innerW / 2, H - 8, `mole fraction of ${els[1]}`, 'axis-label'));
+  const yLab = txt(0, 0, 'Formation energy (eV/atom)', 'axis-label');
+  yLab.setAttribute('transform', `translate(14 ${M.top + innerH / 2}) rotate(-90)`);
+  yLab.setAttribute('text-anchor', 'middle');
+  svg.appendChild(yLab);
+  svg.appendChild(txt(M.left - 6, sy(yMax) + 3, yMax.toFixed(2), 'tick-label'));
+  svg.appendChild(txt(M.left - 6, sy(0) + 3, '0', 'tick-label'));
+  if (yMin < 0) svg.appendChild(txt(M.left - 6, sy(yMin) + 3, yMin.toFixed(2), 'tick-label'));
+
+  // Title chip
+  svg.appendChild(txt(M.left, M.top - 8,
+    `${viz.chemsys}  ·  convex hull  ·  ${viz.n_stable} on hull / ${viz.n_metastable} metastable`,
+    'chart-title'));
+
+  return svg;
+}
+
+/** Andrew's monotone chain lower hull on (x, y) — y is energy, lower is better. */
+function lowerConvexHull(points) {
+  const pts = points.slice().sort((a, b) => a.x - b.x || a.y - b.y);
+  const out = [];
+  for (const p of pts) {
+    while (out.length >= 2) {
+      const a = out[out.length - 2], b = out[out.length - 1];
+      const cross = (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
+      // For LOWER hull we keep right turns or collinear; pop when cross >= 0
+      // (we want points that bow downward).
+      if (cross >= 0) out.pop();
+      else break;
+    }
+    out.push(p);
+  }
+  return out;
+}
+
+/** Old behaviour, kept for unary + ternary+ chemsys. */
+function renderScatterSVG(viz) {
+
+  // Layout
+  const W = 460, H = 220;
+  const M = { top: 18, right: 14, bottom: 38, left: 52 };
+  const innerW = W - M.left - M.right;
+  const innerH = H - M.top - M.bottom;
+
+  // Filter out points that don't have both axes — they don't plot.
+  const pts = viz.points.filter(p =>
+    typeof p.formation_energy_per_atom === 'number' &&
+    typeof p.energy_above_hull === 'number'
+  );
+  if (pts.length === 0) return null;
+
+  const xs = pts.map(p => p.formation_energy_per_atom);
+  const ys = pts.map(p => p.energy_above_hull);
+  const xMin = Math.min(...xs), xMax = Math.max(...xs);
+  const yMin = 0;
+  const yMax = Math.max(...ys, 0.05);  // floor so the baseline isn't squished
+  const padX = (xMax - xMin) * 0.06 || 0.1;
+  const x0 = xMin - padX, x1 = xMax + padX;
+  const sx = v => M.left + ((v - x0) / (x1 - x0 || 1)) * innerW;
+  const sy = v => M.top + innerH - ((v - yMin) / (yMax - yMin || 1)) * innerH;
+
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('class', 'phase-diagram');
+  svg.setAttribute('role', 'img');
+  svg.setAttribute('aria-label',
+    `Phase diagram scatter for ${viz.chemsys}: ${viz.n_stable} stable, ${viz.n_metastable} metastable phases.`);
+
+  // Axes
+  const axis = (x1_, y1_, x2_, y2_) => {
+    const ln = document.createElementNS(ns, 'line');
+    ln.setAttribute('x1', x1_); ln.setAttribute('y1', y1_);
+    ln.setAttribute('x2', x2_); ln.setAttribute('y2', y2_);
+    ln.setAttribute('stroke', 'rgba(255,255,255,0.18)');
+    ln.setAttribute('stroke-width', '1');
+    return ln;
+  };
+  svg.appendChild(axis(M.left, M.top, M.left, M.top + innerH));            // y-axis
+  svg.appendChild(axis(M.left, M.top + innerH, M.left + innerW, M.top + innerH));  // x-axis
+
+  // Hull baseline (y=0)
+  const hullLn = document.createElementNS(ns, 'line');
+  hullLn.setAttribute('x1', M.left); hullLn.setAttribute('x2', M.left + innerW);
+  hullLn.setAttribute('y1', sy(0)); hullLn.setAttribute('y2', sy(0));
+  hullLn.setAttribute('stroke', '#f59e0b');
+  hullLn.setAttribute('stroke-width', '1');
+  hullLn.setAttribute('stroke-dasharray', '3 4');
+  hullLn.setAttribute('opacity', '0.55');
+  svg.appendChild(hullLn);
+
+  // Axis labels
+  const txt = (x, y, str, cls = 'axis-label') => {
+    const t = document.createElementNS(ns, 'text');
+    t.setAttribute('x', x); t.setAttribute('y', y); t.setAttribute('class', cls);
+    t.textContent = str;
+    return t;
+  };
+  svg.appendChild(txt(M.left + innerW / 2, H - 10, 'Formation energy (eV/atom)', 'axis-label'));
+  const yLabel = txt(0, 0, 'E above hull (eV/atom)', 'axis-label');
+  yLabel.setAttribute('transform', `translate(14 ${M.top + innerH / 2}) rotate(-90)`);
+  yLabel.setAttribute('text-anchor', 'middle');
+  svg.appendChild(yLabel);
+
+  // Y-axis tick: max
+  svg.appendChild(txt(M.left - 6, sy(yMax) + 3, yMax.toFixed(2), 'tick-label'));
+  svg.appendChild(txt(M.left - 6, sy(0) + 3, '0', 'tick-label'));
+
+  // Title chip
+  const title = txt(M.left, M.top - 6, `${viz.chemsys}  ·  ${viz.n_stable} stable, ${viz.n_metastable} metastable`, 'chart-title');
+  svg.appendChild(title);
+
+  // Points
+  for (const p of pts) {
+    const cx = sx(p.formation_energy_per_atom);
+    const cy = sy(p.energy_above_hull);
+    const circle = document.createElementNS(ns, 'circle');
+    circle.setAttribute('cx', cx); circle.setAttribute('cy', cy);
+    circle.setAttribute('r', p.is_stable ? 4.5 : 3.2);
+    circle.setAttribute('class', p.is_stable ? 'pt stable' : 'pt metastable');
+    const tt = document.createElementNS(ns, 'title');
+    tt.textContent =
+      `${p.material_id || ''}  ${p.formula || ''}\n` +
+      `formation E = ${p.formation_energy_per_atom.toFixed(3)} eV/atom\n` +
+      `E above hull = ${p.energy_above_hull.toFixed(3)} eV/atom` +
+      (p.is_stable ? ' (on hull)' : '');
+    circle.appendChild(tt);
+    if (p.material_id) {
+      const a = document.createElementNS(ns, 'a');
+      a.setAttribute('href', `https://next-gen.materialsproject.org/materials/${p.material_id}`);
+      a.setAttribute('target', '_blank');
+      a.setAttribute('rel', 'noopener');
+      a.appendChild(circle);
+      svg.appendChild(a);
+    } else {
+      svg.appendChild(circle);
+    }
+  }
+
+  // Tiny legend in the top-right corner
+  const lg = document.createElementNS(ns, 'g');
+  lg.setAttribute('transform', `translate(${W - M.right - 100} ${M.top + 4})`);
+  const legend = (dy, cls, label) => {
+    const c = document.createElementNS(ns, 'circle');
+    c.setAttribute('cx', 4); c.setAttribute('cy', dy); c.setAttribute('r', cls === 'stable' ? 4.5 : 3.2);
+    c.setAttribute('class', `pt ${cls}`);
+    const t = document.createElementNS(ns, 'text');
+    t.setAttribute('x', 14); t.setAttribute('y', dy + 3);
+    t.setAttribute('class', 'legend-label');
+    t.textContent = label;
+    lg.appendChild(c); lg.appendChild(t);
+  };
+  legend(0, 'stable', 'on hull');
+  legend(14, 'metastable', 'metastable');
+  svg.appendChild(lg);
+
+  return svg;
+}
+
 function fmtArgs(args) {
   if (!args || !Object.keys(args).length) return '';
   return Object.entries(args)
@@ -408,8 +769,17 @@ function handleEvent(kind, p) {
       { live: true });
     setStatus(t('status.calling', p.name), 'live');
   } else if (p.kind === 'tool_result') {
-    addEvent('tool_result',
+    const row = addEvent('tool_result',
       `<span class="name">${p.name || ''}</span><span class="detail">→ ${escAttr(p.result_summary || 'ok')}</span>`);
+    if (p.viz && row) {
+      const svg = renderPhaseDiagramSVG(p.viz);
+      if (svg) {
+        const holder = document.createElement('div');
+        holder.className = 'viz-holder';
+        holder.appendChild(svg);
+        row.appendChild(holder);
+      }
+    }
     setStatus(t('status.toolReturned'), 'live');
   } else if (p.kind === 'tool_error') {
     addEvent('tool_error',
@@ -497,15 +867,25 @@ function enrichAnswerWithMpLinks() {
       a.className = 'mp-link';
       a.textContent = m[0];
       frag.appendChild(a);
-      // Inline ⬇ CIF link right after each mp-id — direct structure download
+      // Inline action chips right after each mp-id.
       const dl = document.createElement('a');
       dl.href = `/api/structure/${m[0]}.cif`;
       dl.className = 'cif-link';
       dl.textContent = '⬇ CIF';
       dl.title = `Download CIF file for ${m[0]}`;
       dl.setAttribute('download', `${m[0]}.cif`);
+      // 3D viewer toggle — clicking expands an inline crystal viewer with
+      // the structure rotating in a ball-and-stick model.
+      const view = document.createElement('button');
+      view.type = 'button';
+      view.className = 'view-link';
+      view.textContent = '◊ 3D';
+      view.title = `Open 3D crystal viewer for ${m[0]}`;
+      view.addEventListener('click', (e) => toggleCrystalViewer(view, m[0]));
       frag.appendChild(document.createTextNode(' '));
       frag.appendChild(dl);
+      frag.appendChild(document.createTextNode(' '));
+      frag.appendChild(view);
       lastIdx = m.index + m[0].length;
     }
     if (lastIdx < text.length) frag.appendChild(document.createTextNode(text.slice(lastIdx)));
