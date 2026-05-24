@@ -31,7 +31,7 @@ def _git_short_sha() -> str:
       2. ``VERSION`` file at the project root (baked by CI / deploy script)
       3. ``git rev-parse`` from inside the source tree
     """
-    if (env := os.environ.get("MATSCOUT_COMMIT")):
+    if env := os.environ.get("MATSCOUT_COMMIT"):
         return env.strip()[:10] or "unknown"
     if _VERSION_FILE.exists():
         try:

@@ -62,6 +62,9 @@ class Run:
     error: str | None = None
     started_at: float = field(default_factory=time.time)
     finished_at: float | None = None
+    # Hold a strong reference to the background task so the event loop
+    # doesn't GC it mid-flight (RUF006).
+    task: asyncio.Task[None] | None = field(default=None, repr=False)
 
 
 _runs: dict[str, Run] = {}
@@ -215,7 +218,7 @@ async def start_query(req: QueryRequest) -> QueryAccepted:
         rid = uuid.uuid4().hex[:12]
         run = Run(request_id=rid, query=req.query, locale=req.locale)
         _runs[rid] = run
-    asyncio.create_task(_drive_run(run))
+    run.task = asyncio.create_task(_drive_run(run))
     return QueryAccepted(request_id=rid)
 
 

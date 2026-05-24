@@ -11,11 +11,19 @@ from matscout.tools.compare import compare_materials
 from matscout.tools.get import MaterialNotFoundError, get_material
 from matscout.tools.search import search_materials
 from matscout.tools.stability import check_stability
+from matscout.tools.synthesis import (
+    get_competing_phases,
+    get_phase_diagram,
+    predict_decomposition,
+)
 
 __all__ = [
     "MaterialNotFoundError",
     "check_stability",
     "compare_materials",
+    "get_competing_phases",
     "get_material",
+    "get_phase_diagram",
+    "predict_decomposition",
     "search_materials",
 ]

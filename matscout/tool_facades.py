@@ -24,7 +24,16 @@ from matscout.tools import (
     compare_materials as _compare_materials,
 )
 from matscout.tools import (
+    get_competing_phases as _get_competing_phases,
+)
+from matscout.tools import (
     get_material as _get_material,
+)
+from matscout.tools import (
+    get_phase_diagram as _get_phase_diagram,
+)
+from matscout.tools import (
+    predict_decomposition as _predict_decomposition,
 )
 from matscout.tools import (
     search_materials as _search_materials,
@@ -92,10 +101,64 @@ def check_stability(material_id: str) -> dict[str, Any]:
     return _check_stability(material_id).model_dump(mode="json")
 
 
+def get_phase_diagram(
+    chemsys: str,
+    max_energy_above_hull: float = 0.2,
+    limit: int = 80,
+) -> dict[str, Any]:
+    """All phases in a chemical system, sorted by distance from the convex hull.
+
+    Use this to answer 'what competing materials exist in the X-Y-Z system?'
+    Returns stable_phases (on the hull) and metastable_phases (above it,
+    sorted by ascending energy_above_hull). Order of elements in chemsys
+    doesn't matter ('Li-Fe-O' == 'O-Fe-Li').
+
+    Args:
+        chemsys: dash-separated chemical system, e.g. 'Li-Fe-O' or 'Si-O'.
+        max_energy_above_hull: cap on E above hull (eV/atom). Default 0.2.
+        limit: max phases to return. Default 80.
+    """
+    return _get_phase_diagram(chemsys, max_energy_above_hull=max_energy_above_hull, limit=limit)
+
+
+def predict_decomposition(material_id: str) -> dict[str, Any]:
+    """For a given material, list the stable competing phases that bound its
+    equilibrium decomposition (in the same chemsys).
+
+    Use this to answer 'if I tried to make this material in the lab, what
+    else would form?' Returns verdict (stable/metastable/unstable), the
+    on-hull phases in the same chemsys, and a human-readable interpretation
+    of synthesizability.
+    """
+    return _predict_decomposition(material_id)
+
+
+def get_competing_phases(
+    formula: str,
+    max_energy_above_hull: float = 0.05,
+    limit: int = 40,
+) -> dict[str, Any]:
+    """All phases in the chemsys of `formula`, regardless of stoichiometry.
+
+    Use this to ask 'what other compositions could form in the same
+    element set?'. Returns stable_phases (on the hull) and metastable
+    neighbors. anchor_formula in the response echoes the input.
+
+    Args:
+        formula: pretty formula like 'Fe2O3' or 'LiFePO4'.
+        max_energy_above_hull: cap on E above hull (eV/atom). Default 0.05.
+        limit: max phases to return. Default 40.
+    """
+    return _get_competing_phases(formula, max_energy_above_hull=max_energy_above_hull, limit=limit)
+
+
 # Canonical registry — both MCP server and agent runner iterate over this list.
 ALL_TOOLS: list[Callable[..., Any]] = [
     search_materials,
     get_material,
     compare_materials,
     check_stability,
+    get_phase_diagram,
+    predict_decomposition,
+    get_competing_phases,
 ]
