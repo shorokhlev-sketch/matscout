@@ -833,3 +833,23 @@ footer a { color: var(--fg-2); text-decoration: none; border-bottom: 1px dashed 
   transition: opacity 0.15s ease;
 }
 .mcp-modal__copy:hover { opacity: 0.85; }
+
+/* ── Phase divider — major workflow boundary (Discovery → Analysis) ──── */
+.ev.phase {
+  margin: 18px 0 8px;
+  padding: 10px 14px;
+  background: linear-gradient(90deg, var(--acc-soft) 0%, transparent 70%);
+  border-left: 3px solid var(--acc);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--fg);
+  letter-spacing: 0.04em;
+}
+.ev.phase .badge {
+  display: none;  /* the content text already names the phase */
+}
+.ev.phase .detail {
+  font-weight: 700;
+}
+.ev.phase .ts { color: var(--fg-3); }

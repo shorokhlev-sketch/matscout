@@ -1131,6 +1131,12 @@ function handleEvent(kind, p) {
       `<span class="name">turn ${p.turn || '?'}</span> <span class="detail">${escAttr(content)}</span>`,
       { live: true });
     setStatus(t('status.thinking', p.turn), 'live');
+  } else if (p.kind === 'phase') {
+    // Major workflow phase divider — Discovery (🔍) vs Analysis (📊).
+    // Bigger and more visible than reasoning bubbles because it marks
+    // a real architectural boundary in the agent's work.
+    addEvent('phase',
+      `<span class="detail">${escAttr(p.content || '')}</span>`);
   } else if (p.kind === 'reasoning') {
     // Agent narration — what the model is about to do, or a synthetic
     // sentence we generated from the tool name + args when the model

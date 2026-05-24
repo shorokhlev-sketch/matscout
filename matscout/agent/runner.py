@@ -24,7 +24,11 @@ from typing import Any
 
 from openai import OpenAI
 
-from matscout.agent.prompts import SYSTEM_PROMPT_V1
+from matscout.agent.prompts import (
+    SYSTEM_PROMPT_ANALYSIS,
+    SYSTEM_PROMPT_DISCOVERY,
+    SYSTEM_PROMPT_V1,
+)
 from matscout.config import get_settings
 
 log = logging.getLogger("matscout.agent")
@@ -35,6 +39,42 @@ DEFAULT_MODEL = "gpt-4o"
 # ngrok tunnel or a deployed instance.
 DEFAULT_MCP_SERVER_URL = "https://matscout.prfo.design/mcp/http/"
 DEFAULT_MCP_SERVER_LABEL = "matscout"
+
+# ── Two-phase agent: tool allowlists per phase ──────────────────────────────
+#
+# Stage 1 (Discovery) only has tools that produce candidate sets — fast,
+# broad, no expensive drilling. Forces the model to STOP after finding
+# candidates instead of trying to compose the final answer in one breath.
+# Stage 2 (Analysis) has the wider toolkit and writes the final markdown.
+_DISCOVERY_TOOL_NAMES: list[str] = [
+    "search_materials",
+    "find_battery_anode",
+    "find_battery_cathode",
+    "find_solar_absorber",
+    "find_thermoelectric",
+    "find_transparent_conductor",
+    "find_2d_materials",
+    "get_jarvis_topological",
+    "find_preprints",
+]
+_ANALYSIS_TOOL_NAMES: list[str] = [
+    "get_material",
+    "compare_materials",
+    "check_stability",
+    "get_elastic_properties",
+    "get_electronic_summary",
+    "get_phase_diagram",
+    "compute_phase_diagram_strict",
+    "predict_decomposition",
+    "get_competing_phases",
+    "pareto_rank",
+    "get_structure",
+    "get_doi_metadata",
+    "find_preprints",
+    # Cross-validation: analysis phase may also pull from JARVIS again
+    "find_2d_materials",
+    "get_jarvis_topological",
+]
 
 
 @dataclass
@@ -231,30 +271,137 @@ def stream_agent(
     mcp_server_url: str = DEFAULT_MCP_SERVER_URL,
     mcp_server_label: str = DEFAULT_MCP_SERVER_LABEL,
     prior_messages: list[dict[str, Any]] | None = None,
+    single_phase: bool = False,
 ) -> Iterator[TraceEvent]:
-    """Yield TraceEvents in real time. End with a 'final' event.
+    """Two-phase orchestrator over OpenAI Responses + remote MCP.
 
-    Conversation continuation has two modes:
+    Phase 1 (Discovery) runs with a narrow tool subset (search-class
+    only) and produces a candidate set. Phase 2 (Analysis) takes those
+    candidates as input and runs with the wider toolkit to drill in,
+    compare, cross-validate, rank, and compose the final answer.
 
-    1. ``previous_response_id`` — OpenAI server-side state, the preferred
-       path for live multi-turn conversations. Subsequent turns refer to
-       the previous response and OpenAI carries the prior context.
-    2. ``prior_messages`` — legacy in-process state, used when resuming
-       from a /r/{id} snapshot whose previous_response_id is no longer
-       valid (OpenAI expires response IDs after their retention window).
-       In that case we cram the reconstructed messages into ``input`` and
-       start a fresh response chain.
+    Why two phases instead of one big call: gpt-4o under a single call
+    hits its tool-call budget around 5-7 invocations into a deep-research
+    workflow and then ends without composing the final markdown. Splitting
+    gives each phase its own budget and its own focused instructions,
+    which produces a defensible final answer significantly more reliably.
+
+    ``single_phase=True`` falls back to the legacy one-call path. Used
+    when resuming a /r/{id} snapshot (no point paying for two calls when
+    we're just continuing an existing chain).
     """
     if client is None:
         api_key = get_settings().openai_api_key
         if not api_key:
             raise RuntimeError(
                 "OPENAI_API_KEY is not configured. The web playground uses gpt-4o "
-                "for agent reasoning; please set OPENAI_API_KEY in the environment. "
-                "(MCP usage via Claude Desktop / Code does not need this key.)"
+                "for agent reasoning; please set OPENAI_API_KEY in the environment."
             )
         client = OpenAI(api_key=api_key)
 
+    # Snapshot resume → single-phase fallback. No discovery needed; the
+    # restored message list already contains "what we know so far".
+    if prior_messages or single_phase:
+        yield from _stream_phase(
+            query=query,
+            instructions=system_prompt,
+            allowed_tool_names=None,
+            max_tool_calls=25,
+            client=client,
+            previous_response_id=previous_response_id,
+            mcp_server_url=mcp_server_url,
+            mcp_server_label=mcp_server_label,
+            prior_messages=prior_messages,
+            phase_label="single",
+        )
+        return
+
+    # ── Phase 1: Discovery ────────────────────────────────────────
+    yield TraceEvent(
+        kind="phase",
+        turn=1,
+        content="🔍 Discovery — finding candidate materials",
+    )
+
+    stage1_text = ""
+    stage1_response_id: str | None = None
+    for ev in _stream_phase(
+        query=query,
+        instructions=SYSTEM_PROMPT_DISCOVERY,
+        allowed_tool_names=_DISCOVERY_TOOL_NAMES,
+        max_tool_calls=10,
+        client=client,
+        previous_response_id=previous_response_id,
+        mcp_server_url=mcp_server_url,
+        mcp_server_label=mcp_server_label,
+        phase_label="discovery",
+    ):
+        if ev.kind == "final":
+            stage1_text = ev.content or ""
+            stage1_response_id = ev.response_id
+            # DON'T forward this 'final' — it's the discovery summary,
+            # not the user-facing answer. The actual final comes from
+            # Phase 2 below.
+        else:
+            yield ev
+
+    # ── Phase 2: Analysis ─────────────────────────────────────────
+    yield TraceEvent(
+        kind="phase",
+        turn=2,
+        content="📊 Analysis — drilling in, ranking, composing answer",
+    )
+
+    analysis_input = (
+        f"User query: {query}\n\n"
+        f"Discovery phase findings:\n{stage1_text}\n\n"
+        "Drill in: pull full property sheets in parallel for the top "
+        "candidates above, compare them, cross-validate ONE non-trivial "
+        "claim against a second source, run pareto_rank if you have ≥3 "
+        "candidates with ≥2 competing properties, then write the FINAL "
+        "markdown answer with a ranked table + rationale + trade-offs."
+    )
+    yield from _stream_phase(
+        query=analysis_input,
+        instructions=SYSTEM_PROMPT_ANALYSIS,
+        allowed_tool_names=_ANALYSIS_TOOL_NAMES,
+        max_tool_calls=25,
+        client=client,
+        previous_response_id=stage1_response_id,
+        mcp_server_url=mcp_server_url,
+        mcp_server_label=mcp_server_label,
+        phase_label="analysis",
+    )
+
+
+def _stream_phase(
+    *,
+    query: str,
+    instructions: str,
+    allowed_tool_names: list[str] | None,
+    max_tool_calls: int,
+    client: OpenAI,
+    model: str = DEFAULT_MODEL,
+    previous_response_id: str | None = None,
+    mcp_server_url: str = DEFAULT_MCP_SERVER_URL,
+    mcp_server_label: str = DEFAULT_MCP_SERVER_LABEL,
+    prior_messages: list[dict[str, Any]] | None = None,
+    phase_label: str = "single",
+) -> Iterator[TraceEvent]:
+    """One Responses API call, streaming events. Internal helper for ``stream_agent``.
+
+    ``allowed_tool_names`` is forwarded to the MCP tool spec as
+    ``allowed_tools`` — restricts the model to a subset of the 21 tools
+    on our MCP server. None = all tools allowed.
+
+    Conversation continuation has two modes:
+
+    1. ``previous_response_id`` — OpenAI server-side state, the preferred
+       path for live multi-turn conversations.
+    2. ``prior_messages`` — legacy in-process state, used when resuming
+       from a /r/{id} snapshot whose previous_response_id is no longer
+       valid.
+    """
     # Build the `input` payload. Two shapes accepted by Responses API:
     # plain string (simplest), or a list of message-like items (richer).
     input_payload: Any
@@ -282,19 +429,23 @@ def stream_agent(
     # include the "mcp" tool variant in its public TypedDict union — the
     # SDK still accepts it at runtime, so we silence the type checker
     # with a cast rather than redefining the upstream type.
-    tools_param: Any = [
-        {
-            "type": "mcp",
-            "server_label": mcp_server_label,
-            "server_url": mcp_server_url,
-            "require_approval": "never",
-        }
-    ]
+    mcp_tool_spec: dict[str, Any] = {
+        "type": "mcp",
+        "server_label": mcp_server_label,
+        "server_url": mcp_server_url,
+        "require_approval": "never",
+    }
+    if allowed_tool_names is not None:
+        # Restrict the model to a subset of the MCP server's tools.
+        # OpenAI accepts ``allowed_tools`` as either a list of names or a
+        # filter dict; the list form is enough for our purposes.
+        mcp_tool_spec["allowed_tools"] = allowed_tool_names
+    tools_param: Any = [mcp_tool_spec]
 
     yield TraceEvent(
         kind="thinking",
         turn=1,
-        content="Planning next step (via MCP)…",
+        content=f"Planning next step (via MCP, phase={phase_label})…",
     )
 
     # Recent tool-call history — used to detect "the model just retried
@@ -346,10 +497,11 @@ def stream_agent(
     try:
         stream = client.responses.create(
             model=model,
-            instructions=system_prompt,
+            instructions=instructions,
             input=input_payload,
             tools=tools_param,
             previous_response_id=previous_response_id,
+            max_tool_calls=max_tool_calls,
             stream=True,
         )
     except Exception as e:
