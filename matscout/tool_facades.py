@@ -24,10 +24,22 @@ from matscout.tools import (
     compare_materials as _compare_materials,
 )
 from matscout.tools import (
+    find_papers as _find_papers,
+)
+from matscout.tools import (
+    find_preprints as _find_preprints,
+)
+from matscout.tools import (
     get_competing_phases as _get_competing_phases,
 )
 from matscout.tools import (
+    get_doi_metadata as _get_doi_metadata,
+)
+from matscout.tools import (
     get_material as _get_material,
+)
+from matscout.tools import (
+    get_papers_about as _get_papers_about,
 )
 from matscout.tools import (
     get_phase_diagram as _get_phase_diagram,
@@ -152,6 +164,65 @@ def get_competing_phases(
     return _get_competing_phases(formula, max_energy_above_hull=max_energy_above_hull, limit=limit)
 
 
+def find_papers(
+    query: str,
+    year_from: int | None = None,
+    limit: int = 10,
+) -> dict[str, Any]:
+    """Search Semantic Scholar for academic papers matching `query`.
+
+    Use this for 'literature review' style asks. Returns up to `limit`
+    papers with title, authors, year, venue, DOI, abstract snippet, and
+    citation count. Bias the agent to call this after finding candidates
+    in MP — readers want context, not just numbers.
+
+    Args:
+        query: free-text query, e.g. 'cathode materials Na-ion battery'.
+        year_from: minimum publication year (inclusive). None = no bound.
+        limit: max papers returned. Default 10, cap 100.
+    """
+    return _find_papers(query, year_from=year_from, limit=limit).model_dump(mode="json")
+
+
+def get_papers_about(
+    material_id_or_formula: str,
+    year_from: int | None = None,
+    limit: int = 10,
+) -> dict[str, Any]:
+    """Find recent papers that mention a specific material (by mp-id or formula).
+
+    Use this when the user wants 'what's been published about X recently'.
+    Internally biases the search toward materials-science context so a
+    raw formula doesn't accidentally hit unrelated literature.
+    """
+    return _get_papers_about(material_id_or_formula, year_from=year_from, limit=limit).model_dump(
+        mode="json"
+    )
+
+
+def get_doi_metadata(doi: str) -> dict[str, Any]:
+    """Resolve a DOI to a canonical bibrecord (CrossRef).
+
+    Use this to expand a DOI string from the user or from another tool's
+    result into authors / year / journal / abstract.
+    """
+    return _get_doi_metadata(doi).model_dump(mode="json")
+
+
+def find_preprints(
+    query: str,
+    max_age_days: int | None = None,
+    limit: int = 10,
+) -> dict[str, Any]:
+    """Search arXiv for preprints matching `query`, sorted by submission date.
+
+    Use this when the user wants bleeding-edge results that may not be in
+    a journal yet. `max_age_days` lets you filter (coarse-grained, year level).
+    Returns up to `limit` preprints with title, authors, year, PDF URL.
+    """
+    return _find_preprints(query, max_age_days=max_age_days, limit=limit).model_dump(mode="json")
+
+
 # Canonical registry — both MCP server and agent runner iterate over this list.
 ALL_TOOLS: list[Callable[..., Any]] = [
     search_materials,
@@ -161,4 +232,8 @@ ALL_TOOLS: list[Callable[..., Any]] = [
     get_phase_diagram,
     predict_decomposition,
     get_competing_phases,
+    find_papers,
+    get_papers_about,
+    get_doi_metadata,
+    find_preprints,
 ]

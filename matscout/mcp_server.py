@@ -16,8 +16,12 @@ from mcp.server.fastmcp import FastMCP
 from matscout.tool_facades import (
     check_stability,
     compare_materials,
+    find_papers,
+    find_preprints,
     get_competing_phases,
+    get_doi_metadata,
     get_material,
+    get_papers_about,
     get_phase_diagram,
     predict_decomposition,
     search_materials,
@@ -37,7 +41,7 @@ mcp = FastMCP(
 )
 
 
-# Register all seven facades as MCP tools. Docstrings on the facades become
+# Register all facades as MCP tools. Docstrings on the facades become
 # the tool descriptions visible to MCP clients.
 mcp.tool()(search_materials)
 mcp.tool()(get_material)
@@ -46,6 +50,10 @@ mcp.tool()(check_stability)
 mcp.tool()(get_phase_diagram)
 mcp.tool()(predict_decomposition)
 mcp.tool()(get_competing_phases)
+mcp.tool()(find_papers)
+mcp.tool()(get_papers_about)
+mcp.tool()(get_doi_metadata)
+mcp.tool()(find_preprints)
 
 
 def main() -> None:

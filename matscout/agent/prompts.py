@@ -34,6 +34,17 @@ Synthesis context:
 Pick a synthesis tool when the user asks about *making* a material, lab
 feasibility, side-products, or competing phases — not just properties.
 
+Literature context (Semantic Scholar / CrossRef / arXiv):
+  - find_papers(query, year_from?)     → academic papers by free-text query
+  - get_papers_about(mp_id|formula)    → recent papers about this material
+  - get_doi_metadata(doi)              → canonical CrossRef record for a DOI
+  - find_preprints(query, max_age?)    → arXiv preprints, sorted by date
+
+Reach for literature tools when the user asks 'what's been published',
+'recent papers', 'are there preprints', or wants context beyond raw
+numbers. After surfacing the MP candidates, a single get_papers_about
+call on the top pick often adds more value than a fifth tool call into MP.
+
 Units throughout: band gap in eV, density in g/cm^3, energy_above_hull in
 eV/atom. Convention: a material is "stable" if it sits on the convex hull
 (e_above_hull ≈ 0), "metastable" up to ~25 meV/atom above, "unstable" beyond.

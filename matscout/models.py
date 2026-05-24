@@ -9,7 +9,7 @@ asserts against. Keeping these strict and small is the whole point of
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -235,3 +235,41 @@ class StabilityReport(BaseModel):
     is_stable: bool | None = None
     verdict: Verdict
     explanation: str
+
+
+# ── Literature / paper-search models ────────────────────────────────────────
+
+
+class Paper(BaseModel):
+    """Compact bibliographic record. Designed to fit both Semantic Scholar
+    and arXiv-derived rows behind the same shape."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    paper_id: str = Field(
+        ..., description="Source-prefixed id: 's2:abc123', 'arxiv:2401.12345', 'doi:10.x/y'."
+    )
+    source: Literal["semantic-scholar", "arxiv", "crossref"]
+    title: str
+    authors: list[str] = Field(default_factory=list, description="Short author list, name strings.")
+    year: int | None = None
+    venue: str | None = Field(default=None, description="Journal or preprint server.")
+    doi: str | None = None
+    url: str | None = None
+    abstract: str | None = None
+    citation_count: int | None = None
+    open_access_url: str | None = Field(
+        default=None,
+        description="Direct PDF link when known (arXiv preprint, OA copy, etc.).",
+    )
+
+
+class PaperList(BaseModel):
+    """Return shape of literature-search tools."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    query: str
+    source: Literal["semantic-scholar", "arxiv", "crossref"]
+    count: int
+    papers: list[Paper]
