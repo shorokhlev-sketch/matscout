@@ -31,7 +31,7 @@
 <body>
 
 <header class="top">
-  <span class="brand">matscout</span>
+  <a href="/" class="brand" data-brand-home>matscout</a>
   <span class="tag" data-i18n="header.tag">MCP server + OpenAI agent over Materials Project</span>
   <span class="locale-switch" role="group" aria-label="Language">
     <button class="loc-btn" data-locale="en" aria-pressed="true">EN</button>
@@ -430,6 +430,17 @@ async function ask(query) {
 
   runBtn.disabled = false;
   stopTimer();
+
+  // Pin this run to the URL so browser back/forward navigates between past
+  // turns and snapshots. We reuse the /r/{id} replay route — first turn of
+  // a conversation pushes a new entry, subsequent follow-ups push too, so
+  // ⌘[ steps backwards through the trace history.
+  if (requestId) {
+    const newPath = `/r/${requestId}`;
+    if (location.pathname !== newPath) {
+      history.pushState({ run: requestId, conv: window._conversationId }, '', newPath);
+    }
+  }
 }
 
 function sleep(ms) {
@@ -1085,6 +1096,24 @@ async function maybeReplaySnapshot() {
 // First paint
 applyI18n();
 maybeReplaySnapshot();
+
+// ── browser back/forward across past runs ────────────────────────────────
+// When the user navigates to a previously pushed history entry, the simplest
+// way to reproduce the matching agent trace is to re-trigger the initial
+// snapshot replay path. Hard reload keeps the rendering pipeline identical
+// to a direct visit; the cost is one extra HTTPS round trip.
+window.addEventListener('popstate', () => {
+  location.reload();
+});
+
+// Brand click should always return to a fresh home — drop the in-memory
+// conversation so the visit is truly clean (mirrors what nginx's /r/{id} →
+// / navigation would do anyway, but instantaneously).
+document.querySelectorAll('[data-brand-home]').forEach(el => {
+  el.addEventListener('click', () => {
+    window._conversationId = null;
+  });
+});
 </script>
 </body>
 </html>

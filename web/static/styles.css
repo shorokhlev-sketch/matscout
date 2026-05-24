@@ -47,7 +47,13 @@ header.top .brand {
   font-weight: 700;
   font-size: 13px;
   letter-spacing: 0.02em;
+  color: var(--fg);
+  text-decoration: none;
+  cursor: pointer;
+  transition: color 0.15s ease;
 }
+header.top .brand:hover { color: var(--acc); }
+header.top .brand:hover::before { background: var(--fg); }
 header.top .brand::before {
   content: '';
   display: inline-block;
