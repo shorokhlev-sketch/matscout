@@ -1,38 +1,55 @@
 # matscout
 
-MCP server + OpenAI agent over the [Materials Project](https://next-gen.materialsproject.org/)
-database. You describe what you need in plain language — the agent translates to typed
-property filters, queries the DB, self-corrects when too few / too many hits, and explains
-the trade-offs in the answer with citations and downloadable inputs for downstream DFT codes.
+A live MCP server backed by the [Materials Project](https://next-gen.materialsproject.org/)
+database, plus a playground that reasons through it. You describe what you need in plain
+language — gpt-4o discovers our 10 typed tools via MCP, calls them over HTTP, self-corrects
+when too few / too many hits, and explains the trade-offs in the answer with citations and
+downloadable inputs for downstream DFT codes.
 
 **Live demo:** [matscout.prfo.design](https://matscout.prfo.design)
+**Live MCP endpoint:** `https://matscout.prfo.design/mcp/http/`
 
 ```
 NL query
    ↓
-[ agent: gpt-4o ]
+Browser → FastAPI playground
    ↓
-[ 12 typed tools — property lookup · synthesis · literature · structure export ]
+OpenAI Responses API   tools=[{ type:"mcp", server_url:".../mcp/http/" }]
    ↓
-[ mp-api ] ←→ [ SQLite cache + research store ]
+OpenAI egress  ──HTTPS──→  matscout MCP server  (FastMCP Streamable-HTTP)
+                              ↓
+                            10 typed tools (property · synthesis · literature · structure)
+                              ↓
+                            mp-api ←→ SQLite cache + research store
+                              ↓
+                            tool result back through MCP
    ↓
-ranked answer + comparison tables + inline phase diagram + CIF + papers
+gpt-4o synthesises an answer (markdown + inline SVG phase diagram + CIF chips + 3D viewer)
+   ↓
+permanent /r/{id} URL with BibTeX export
 ```
 
-Two surfaces over one set of tool functions:
+The MCP server is exposed by the same uvicorn process the playground runs on — so the
+"MCP" claim is not architectural: it is the literal load-bearing piece. Every browser
+query produces real HTTP traffic between OpenAI's egress and our MCP endpoint. Two
+transports for client compatibility:
 
-- **MCP server** (FastMCP) — plug into Claude Desktop / Claude Code
-- **OpenAI function-calling agent** behind a FastAPI playground
+- **`/mcp/http/`** — Streamable HTTP (modern, what OpenAI Responses API + Claude Desktop's
+  `url` field use)
+- **`/mcp/sse/`** — legacy SSE (older `mcp-cli` versions)
+- **stdio** — local subprocess entrypoint `matscout-mcp` for offline use
+
+Same 10 tools on every surface.
 
 ## What it does
 
-12 typed tools, four groups:
+10 typed tools, four groups:
 
 | Group | Tools | What for |
 |---|---|---|
 | Property lookup | `search_materials`, `get_material`, `compare_materials`, `check_stability` | "find me X with band gap Y" |
 | Synthesis context | `get_phase_diagram`, `predict_decomposition`, `get_competing_phases` | "will it survive synthesis?" |
-| Literature | `find_papers`, `get_papers_about`, `get_doi_metadata`, `find_preprints` | Semantic Scholar + CrossRef + arXiv |
+| Literature | `get_doi_metadata`, `find_preprints` | CrossRef + arXiv (rate-limit-stable, no API key) |
 | Computational interop | `get_structure` (CIF / POSCAR / XYZ) | hand off to VASP / Quantum ESPRESSO |
 
 The agent decomposes a question like *"find a stable semiconductor with band gap ~1.5 eV
@@ -47,7 +64,8 @@ plus inline phase-diagram visualizations and 3D crystal viewers.
 - `mcp[cli]` (FastMCP) for the MCP server
 - `openai` SDK for the function-calling agent loop
 - `pydantic` (typed I/O), `pydantic-settings` (env config)
-- `fastapi` + polling for the playground (SSE was killed by ISP DPI on long-lived `text/event-stream`)
+- `openai` SDK 2.38+ Responses API with the new `tools=[{type: "mcp", ...}]` shape
+- `fastapi` + polling for the browser↔origin path (SSE was killed by ISP DPI on long-lived `text/event-stream`; OpenAI↔MCP server-to-server traffic is fine)
 - SQLite (WAL mode) for the tool-result cache **and** the persistent research store
 - `pymatgen` for CIF / POSCAR / XYZ export
 - mypy --strict, ruff, pytest, GitHub Actions CI, Docker
@@ -92,10 +110,18 @@ uv run ruff check matscout web
   `GET /api/query/{id}?since=N` polls. Each round-trip looks like a normal REST call to
   the network middleboxes.
 
-- **One tool list, two surfaces.** `matscout/tool_facades.py` is the source of truth.
-  `matscout/mcp_server.py` exposes them via MCP; `matscout/agent/runner.py` wraps them
-  for OpenAI function-calling. The web playground and a Claude Desktop / Code session
-  see exactly the same tools.
+- **One tool list, every surface.** `matscout/tool_facades.ALL_TOOLS` is the source of
+  truth. `matscout/mcp_server.py` registers each function dynamically from that list;
+  `matscout/agent/runner.py` doesn't ship its own JSON schemas at all — it hands OpenAI
+  a single `{type: "mcp", server_url: "https://matscout.prfo.design/mcp/http/"}` tool and
+  lets the model discover the same 10 functions via MCP `tools/list`. Add a tool to
+  `ALL_TOOLS` and it appears for stdio MCP clients, HTTP MCP clients, and the playground
+  agent simultaneously — no parallel registration.
+
+- **Verifiable MCP.** Because the playground reasons through the hosted MCP server
+  (not a synthetic in-process loop), every browser query produces real HTTP traffic
+  between OpenAI's egress and `matscout.prfo.design/mcp/http/`. The "MCP server" claim
+  is exercised by every visitor click, not just a code-search artefact.
 
 - **Self-correction in the prompt, not the code.** When MP returns 0 hits or 200 hits,
   the agent loop doesn't hard-code "relax / tighten" branches — the system prompt teaches

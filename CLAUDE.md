@@ -8,20 +8,34 @@ GitHub `shorokhlev-sketch/matscout` (приватный). Перед сесси�
 
 ## Архитектура
 
-Один набор тулов выставлен ДВУМЯ поверхностями:
+Один набор тулов выставлен через единый MCP-сервер. Веб-плейграунд не дёргает тулы у себя в процессе — gpt-4o ходит через OpenAI Responses API к **нашему же** MCP-серверу по сети. Это значит «MCP server claim» = живой нагруженный path, а не картинка в README.
 
 ```
 matscout/tools/{search, get, compare, stability, synthesis, literature, structure}.py
     ↓
-matscout/tool_facades.py  # flat-kwarg wrappers, ALL_TOOLS=[…]
+matscout/tool_facades.py    # flat-kwarg wrappers, ALL_TOOLS = [10 функций]
     ↓
-matscout/agent/runner.py  # OpenAI function-calling loop (stream_agent)
-matscout/mcp_server.py    # FastMCP wrapper, тот же ALL_TOOLS
-    ↓
-web/app.py                # FastAPI playground, polling-based
+matscout/mcp_server.py      # FastMCP, регистрирует ALL_TOOLS динамически
+    ↓                          ↓
+   stdio entrypoint          mounted в web/app.py:
+   (matscout-mcp)              /mcp/sse/ (SSE)
+                               /mcp/http/ (Streamable HTTP, OpenAI-compatible)
+                                  ↓
+                               Тот же endpoint используется и нашим веб-плейграундом,
+                               и любым внешним Claude Desktop через "url" mcpServers.
+
+Маршрут запроса с сайта:
+   Browser → web/app.py /api/query
+       → matscout/agent/runner.py:stream_agent
+       → client.responses.create(tools=[{type:"mcp", server_url:".../mcp/http/"}])
+       → OpenAI egress ──HTTPS──→ matscout.prfo.design/mcp/http/
+       → FastMCP dispatch → matscout/tools/*.py → mp-api → MP REST
+       → результат обратно OpenAI → text streaming → polling в браузер
 ```
 
-**Тулы (12):** search_materials, get_material, compare_materials, check_stability, get_phase_diagram, predict_decomposition, get_competing_phases, get_structure, find_papers, get_papers_about, get_doi_metadata, find_preprints.
+**Тулы (10):** search_materials, get_material, compare_materials, check_stability, get_phase_diagram, predict_decomposition, get_competing_phases, get_structure, get_doi_metadata, find_preprints.
+
+(find_papers / get_papers_about под Semantic Scholar сняты из `ALL_TOOLS` — S2 anonymous лимит-рейтит с одного IP. Функции остались в `tools/literature.py` для callers с S2 API ключом.)
 
 **Полировка:** Pydantic models с `extra="forbid"`, SQLite кэш с TTL, mypy --strict, ruff, pytest, GitHub Actions CI.
 
@@ -69,19 +83,26 @@ sleep 14   # uvicorn cold start: pymatgen + matplotlib imports
 
 ## Ключевые архитектурные решения
 
-1. **Polling вместо SSE** — РКН/провайдерский DPI режет long-lived `text/event-stream` независимо от heartbeat. Заменил на POST request_id + GET poll. Подробнее в `web/app.py` docstring.
+1. **Полный маршрут через MCP, не через function calling.** Ранее `stream_agent` собирал JSON-схемы из ALL_TOOLS и отдавал их в `chat.completions.create(tools=[…])`, дёргая функции у себя в процессе. Сейчас он отдаёт OpenAI один tool `{type:"mcp", server_url:"matscout.prfo.design/mcp/http/"}` и дальше OpenAI сам ходит по сети к нашему MCP-серверу (тот же uvicorn, FastMCP Streamable-HTTP transport). Эффект: claim «MCP server» работает не на словах, а на каждый запрос с сайта.
 
-2. **Snapshot replay через `/r/{id}`** — каждый run сохраняется в `research.db`. URL вида `/r/abc123` восстанавливает trace + answer. Browser back/forward в SPA через `pushState` использует тот же механизм.
+2. **Polling вместо SSE между браузером и origin** — РКН/провайдерский DPI режет long-lived `text/event-stream` независимо от heartbeat. Заменил на POST request_id + GET poll. Подробнее в `web/app.py` docstring. (OpenAI ↔ наш MCP-сервер живут server-to-server, DPI там не мешает.)
 
-3. **Conversation mode** — runner принимает `prior_messages`, web хранит `Conversation` registry с TTL 1ч. Follow-up отвечает с памятью о предыдущих turns.
+3. **Snapshot replay через `/r/{id}`** — каждый run сохраняется в `research.db`. URL вида `/r/abc123` восстанавливает trace + answer. Browser back/forward в SPA через `pushState` использует тот же механизм.
 
-4. **VPN compatibility** — на VPS включён MSS clamping iptables + `tcp_mtu_probing=2` чтобы OpenVPN TCP/UDP не таймаутил.
+4. **Conversation mode через `previous_response_id`** — раньше я гонял prior_messages в каждом ходе. С Responses API OpenAI хранит контекст на своей стороне, мы кладём только `last_response_id` в Conversation и передаём его в следующем turn. Snapshot resume — fallback: реконструированные messages идут в `input` items (response_id из старого snapshot уже expired).
+
+5. **`openai_api_key` опциональный** — config.py не валидирует его как required, чтобы MCP stdio entrypoint бутился с одним `MP_API_KEY`. Web слой fail-fast'ит при старте если ключа нет.
+
+6. **VPN compatibility** — на VPS включён MSS clamping iptables + `tcp_mtu_probing=2` чтобы OpenVPN TCP/UDP не таймаутил.
 
 ## Известные особенности
 
 - mp-api emits deprecation warning о `nelements` — фактический parameter `num_elements`. Не критично.
 - Для phase diagrams MP не возвращает элементарные эндпоинты в multi-element chemsys query — приходится отдельно тянуть `chemsys=el` и мерджить. Решено в `tools/synthesis.py`.
 - При построении convex hull визуализации полиморфы одинаковой композиции сливаются в одну точку — на UI дедуплицируем в `_phase_diagram_viz`, в tool result LLM получает все.
+- FastMCP DNS-rebinding guard рубит запросы с non-localhost Host header'ом. Поэтому в `mcp_server.py` явно указан `TransportSecuritySettings(allowed_hosts=[…matscout.prfo.design…])`. Если поднимаешь сервер на другом домене — добавь его в allowlist.
+- В trace на `tool_call` events args приходят пустыми (`get_material({})`). Это потому что `response.mcp_call_arguments.delta` стрим идёт параллельно с `response.output_item.added`; реальные args появляются в `tool_result` event. Косметика, не баг.
+- `previous_response_id` у OpenAI имеет retention window. Если conversation пролежала больше чем этот срок, follow-up через id даст 404 — следует fallback на свежий старт.
 
 ## Ритуал
 
