@@ -590,7 +590,15 @@ function renderBinaryHullSVG(viz, els, pts) {
   return svg;
 }
 
-/** Andrew's monotone chain lower hull on (x, y) — y is energy, lower is better. */
+/** Andrew's monotone chain lower hull on (x, y) — y is energy, lower is better.
+ *
+ * Lower hull == the boundary that sags downward through the points; in
+ * thermodynamics this is the boundary below which no entry exists — i.e.
+ * the convex hull of stable phases. Standard Andrew's monotone chain
+ * convention: pop when the new turn is a right turn or collinear
+ * (cross <= 0); keep when it's a strict left turn (cross > 0), which
+ * corresponds to the hull bending downward locally.
+ */
 function lowerConvexHull(points) {
   const pts = points.slice().sort((a, b) => a.x - b.x || a.y - b.y);
   const out = [];
@@ -598,9 +606,7 @@ function lowerConvexHull(points) {
     while (out.length >= 2) {
       const a = out[out.length - 2], b = out[out.length - 1];
       const cross = (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
-      // For LOWER hull we keep right turns or collinear; pop when cross >= 0
-      // (we want points that bow downward).
-      if (cross >= 0) out.pop();
+      if (cross <= 0) out.pop();
       else break;
     }
     out.push(p);
