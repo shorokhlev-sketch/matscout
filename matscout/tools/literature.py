@@ -34,17 +34,23 @@ def _http_get(
     params: dict[str, Any] | None = None,
     max_retries: int = 4,
 ) -> httpx.Response:
-    """GET with exponential back-off on 429s — Semantic Scholar throttles
-    anonymous clients tightly (~1 req/sec). 429 retries don't count against
-    our caller (the agent doesn't see them)."""
+    """GET with exponential back-off on 429s + follow redirects.
+
+    Semantic Scholar throttles anonymous clients tightly (~1 req/sec).
+    arXiv now 301-redirects http → https. We handle both transparently
+    so callers see a single clean response.
+    """
     delay = 1.5
     last: httpx.Response | None = None
-    with httpx.Client(headers={"User-Agent": _UA}, timeout=_TIMEOUT) as c:
-        for attempt in range(max_retries):
+    with httpx.Client(
+        headers={"User-Agent": _UA},
+        timeout=_TIMEOUT,
+        follow_redirects=True,
+    ) as c:
+        for _ in range(max_retries):
             last = c.get(url, params=params)
             if last.status_code != 429:
                 return last
-            # Respect Retry-After when present; otherwise back off exponentially.
             ra = last.headers.get("retry-after")
             wait = float(ra) if (ra and ra.replace(".", "", 1).isdigit()) else delay
             time.sleep(min(wait, 8.0))
@@ -111,14 +117,15 @@ def find_papers(
         params["year"] = f"{year_from}-"
 
     r = _http_get(f"{_S2_BASE}/paper/search", params=params)
-    if r.status_code == 429:
-        # Semantic Scholar throttles anonymous clients hard. Surface this as
-        # an empty list with an explanatory error instead of crashing the
-        # agent loop — the LLM can decide to retry with `find_preprints`
-        # (arXiv has no such limit).
+    if r.status_code in (403, 429):
+        # Semantic Scholar's anonymous tier is aggressive: 429 for rate-limit,
+        # 403 when a cloud IP is blanket-banned (we see this from VPS cidrs).
+        # Either way, give the LLM an actionable instruction instead of crashing.
+        reason = "rate-limited" if r.status_code == 429 else "blocked anonymous access"
         raise RuntimeError(
-            "Semantic Scholar rate-limited the anonymous request (HTTP 429). "
-            "Try `find_preprints` (arXiv) for the same topic, or rerun after a short pause."
+            f"Semantic Scholar {reason} (HTTP {r.status_code}). "
+            "Fall back to `find_preprints` (arXiv has no such limit) "
+            "or `get_doi_metadata` if you have a DOI."
         )
     r.raise_for_status()
     body = r.json()
