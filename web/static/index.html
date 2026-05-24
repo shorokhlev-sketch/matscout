@@ -854,7 +854,16 @@ function renderScatterSVG(viz) {
 
 function fmtArgs(args) {
   if (!args || !Object.keys(args).length) return '';
-  return Object.entries(args)
+  // Drop null / undefined / empty-array entries — Pydantic dumps all
+  // optional fields by default, but only the ones the agent actually
+  // set carry signal. Showing `null` everywhere clutters the trace.
+  const isEmpty = (v) =>
+    v === null || v === undefined ||
+    (Array.isArray(v) && v.length === 0) ||
+    (typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length === 0);
+  const kept = Object.entries(args).filter(([, v]) => !isEmpty(v));
+  if (!kept.length) return '';
+  return kept
     .map(([k, v]) => `<span class="kv"><span class="k">${k}</span>=<span class="v">${escAttr(JSON.stringify(v))}</span></span>`)
     .join(', ');
 }
