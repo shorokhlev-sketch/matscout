@@ -50,7 +50,7 @@
 <div class="mcp-modal" id="mcp-modal" role="dialog" aria-modal="true" hidden>
   <div class="mcp-modal__card">
     <button class="mcp-modal__close" id="mcp-modal-close" aria-label="Close">✕</button>
-    <h2 data-i18n="mcp.title">You're touching MCP right now.</h2>
+    <h2 data-i18n="mcp.title">You're using MCP right now.</h2>
     <p data-i18n-html="mcp.body1">
       Every query you send here is routed by OpenAI's Responses API to our live MCP server at
       <code>matscout.prfo.design/mcp/http/</code>. The LLM (gpt-4o) doesn't run the 10 tools
@@ -137,7 +137,7 @@ const I18N = {
   en: {
     'header.tag': 'gpt-4o via MCP · live tools at /mcp/http/',
     'header.useMcp': 'Use this MCP',
-    'mcp.title': "You're touching MCP right now.",
+    'mcp.title': "You're using MCP right now.",
     'mcp.body1': 'Every query you send here is routed by OpenAI\'s Responses API to our live MCP server at <code>matscout.prfo.design/mcp/http/</code>. The LLM (gpt-4o) doesn\'t run the 10 tools itself — it discovers them via MCP <code>tools/list</code>, then calls them back over HTTP. Open DevTools → Network and you\'ll see <code>response.output_item.added</code> events whose <code>type=mcp_call</code> are real round-trips to this MCP endpoint.',
     'mcp.body2': "Want to use the same MCP server from your own Claude (Desktop or Code)? It's a remote MCP — just point at the URL:",
     'mcp.body3': "Drop into <code>~/Library/Application Support/Claude/claude_desktop_config.json</code> and restart Claude. No API keys, no subprocess — it's a live network endpoint. For the stdio (local subprocess) flavour, see <a href=\"https://github.com/shorokhlev-sketch/matscout\" target=\"_blank\" rel=\"noopener\">github.com/shorokhlev-sketch/matscout</a>.",
@@ -191,7 +191,7 @@ const I18N = {
   ru: {
     'header.tag': 'gpt-4o через MCP · живые тулы на /mcp/http/',
     'header.useMcp': 'Подключить этот MCP',
-    'mcp.title': 'Сейчас вы реально дёргаете MCP.',
+    'mcp.title': 'Прямо сейчас вы используете MCP.',
     'mcp.body1': 'Каждый ваш запрос OpenAI Responses API маршрутизирует к нашему живому MCP-серверу на <code>matscout.prfo.design/mcp/http/</code>. LLM (gpt-4o) не исполняет 10 тулов сам — он находит их через MCP <code>tools/list</code> и вызывает по HTTP обратно к нам. Откройте DevTools → Network: события <code>response.output_item.added</code> с <code>type=mcp_call</code> — это реальные round-trip\'ы к этому endpoint\'у.',
     'mcp.body2': 'Хотите использовать тот же MCP-сервер из своего Claude (Desktop или Code)? Это remote MCP — просто укажите URL:',
     'mcp.body3': "Положите в <code>~/Library/Application Support/Claude/claude_desktop_config.json</code> и перезапустите Claude. Никаких API-ключей, никакого subprocess — это сетевой endpoint. Для stdio-варианта (локальный subprocess) — <a href=\"https://github.com/shorokhlev-sketch/matscout\" target=\"_blank\" rel=\"noopener\">github.com/shorokhlev-sketch/matscout</a>.",
