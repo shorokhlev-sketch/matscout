@@ -513,9 +513,7 @@ def stream_agent(
                 # message — happens when it gets confused and stops
                 # short. Don't lie that the narration was the answer;
                 # tell the user honestly and point at the trace.
-                tool_summary = ", ".join(
-                    f"`{name}`" for name, _ in recent_calls[-5:]
-                )
+                tool_summary = ", ".join(f"`{name}`" for name, _ in recent_calls[-5:])
                 final_text = (
                     "The agent called " + tool_summary + " but didn't compose a final "
                     "answer afterwards. The tool results are visible in the trace above. "

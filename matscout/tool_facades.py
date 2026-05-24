@@ -24,16 +24,46 @@ from matscout.tools import (
     compare_materials as _compare_materials,
 )
 from matscout.tools import (
+    compute_phase_diagram_strict as _compute_phase_diagram_strict,
+)
+from matscout.tools import (
+    find_2d_materials as _find_2d_materials,
+)
+from matscout.tools import (
+    find_battery_anode as _find_battery_anode,
+)
+from matscout.tools import (
+    find_battery_cathode as _find_battery_cathode,
+)
+from matscout.tools import (
     find_papers as _find_papers,
 )
 from matscout.tools import (
     find_preprints as _find_preprints,
 )
 from matscout.tools import (
+    find_solar_absorber as _find_solar_absorber,
+)
+from matscout.tools import (
+    find_thermoelectric as _find_thermoelectric,
+)
+from matscout.tools import (
+    find_transparent_conductor as _find_transparent_conductor,
+)
+from matscout.tools import (
     get_competing_phases as _get_competing_phases,
 )
 from matscout.tools import (
     get_doi_metadata as _get_doi_metadata,
+)
+from matscout.tools import (
+    get_elastic_properties as _get_elastic_properties,
+)
+from matscout.tools import (
+    get_electronic_summary as _get_electronic_summary,
+)
+from matscout.tools import (
+    get_jarvis_topological as _get_jarvis_topological,
 )
 from matscout.tools import (
     get_material as _get_material,
@@ -46,6 +76,9 @@ from matscout.tools import (
 )
 from matscout.tools import (
     get_structure as _get_structure,
+)
+from matscout.tools import (
+    pareto_rank as _pareto_rank,
 )
 from matscout.tools import (
     predict_decomposition as _predict_decomposition,
@@ -244,26 +277,260 @@ def find_preprints(
     return _find_preprints(query, max_age_days=max_age_days, limit=limit).model_dump(mode="json")
 
 
+# ── Application-aware combinators ──────────────────────────────────────────
+
+
+def find_battery_anode(
+    chemistry: str = "lithium",
+    limit: int = 10,
+) -> list[dict[str, Any]]:
+    """Pre-tuned anode candidates for solid-state batteries.
+
+    Use this instead of generic search_materials whenever the user asks
+    for "anode", "battery negative electrode", or names a specific
+    chemistry. Filters by the element shortlist that real Li / Na / Mg
+    / K anodes use, excludes radioactives, and skips pure metals that
+    aren't intercalation hosts.
+
+    Args:
+        chemistry: "lithium" | "sodium" | "magnesium" | "potassium".
+        limit: how many candidates to return.
+    """
+    cands = _find_battery_anode(chemistry=chemistry, limit=limit)  # type: ignore[arg-type]
+    return [c.model_dump(mode="json") for c in cands]
+
+
+def find_battery_cathode(
+    chemistry: str = "lithium",
+    limit: int = 10,
+) -> list[dict[str, Any]]:
+    """Pre-tuned cathode candidates (intercalation oxides / phosphates).
+
+    Filters to mixed-valence transition-metal compounds containing the
+    working ion (Li or Na). Use for "cathode", "positive electrode",
+    "LiCoO2-class", etc.
+
+    Args:
+        chemistry: "lithium" | "sodium".
+        limit: how many candidates to return.
+    """
+    cands = _find_battery_cathode(chemistry=chemistry, limit=limit)  # type: ignore[arg-type]
+    return [c.model_dump(mode="json") for c in cands]
+
+
+def find_solar_absorber(
+    exclude_toxic: bool = True,
+    require_direct_gap: bool = False,
+    limit: int = 10,
+) -> list[dict[str, Any]]:
+    """Single-junction solar absorbers near the Shockley-Queisser optimum.
+
+    Band gap 1.1-1.7 eV, stable, optionally non-toxic / direct-gap.
+    Use for "solar cell", "photovoltaic", "absorber layer".
+
+    Args:
+        exclude_toxic: drop Pb, Cd, As, Hg, Tl, Be compounds.
+        require_direct_gap: only direct-gap semiconductors.
+        limit: max candidates.
+    """
+    cands = _find_solar_absorber(
+        exclude_toxic=exclude_toxic,
+        require_direct_gap=require_direct_gap,
+        limit=limit,
+    )
+    return [c.model_dump(mode="json") for c in cands]
+
+
+def find_thermoelectric(
+    target_gap: str = "narrow",
+    limit: int = 10,
+) -> list[dict[str, Any]]:
+    """Thermoelectric candidates — narrow-gap, often heavy chalcogenide.
+
+    Use for "thermoelectric", "Seebeck", "ZT", "Peltier".
+
+    Args:
+        target_gap: "metallic" | "very-narrow" | "narrow".
+        limit: max candidates.
+    """
+    cands = _find_thermoelectric(target_gap=target_gap, limit=limit)  # type: ignore[arg-type]
+    return [c.model_dump(mode="json") for c in cands]
+
+
+def find_transparent_conductor(
+    limit: int = 10,
+) -> list[dict[str, Any]]:
+    """Wide-gap oxide candidates for TCO applications.
+
+    Returns undoped wide-gap oxides; the agent should note in its
+    answer that real conductivity requires extrinsic doping that MP
+    doesn't store.
+
+    Args:
+        limit: max candidates.
+    """
+    cands = _find_transparent_conductor(limit=limit)
+    return [c.model_dump(mode="json") for c in cands]
+
+
+# ── Property-sheet expansions ──────────────────────────────────────────────
+
+
+def get_elastic_properties(material_id: str) -> dict[str, Any]:
+    """Bulk modulus, shear modulus, hardness for one mp-id.
+
+    Returns dict with bulk_modulus_vrh_gpa, shear_modulus_vrh_gpa,
+    young_modulus_vrh_gpa, poisson_ratio, anisotropy,
+    vickers_hardness_gpa (empirical), interpretation. Honestly reports
+    when MP has no elasticity data for the entry.
+    """
+    return _get_elastic_properties(material_id)
+
+
+def get_electronic_summary(material_id: str) -> dict[str, Any]:
+    """Electronic-structure summary: gap, direct/indirect, magnetic ordering.
+
+    Lightweight lookup (doesn't fetch full DOS arrays). Returns
+    band_gap_eV, is_gap_direct, vbm/cbm energies, fermi_energy_eV,
+    is_magnetic, ordering, total_magnetisation, interpretation.
+    """
+    return _get_electronic_summary(material_id)
+
+
+# ── Strict analytics ───────────────────────────────────────────────────────
+
+
+def compute_phase_diagram_strict(
+    chemsys: str,
+    include_decomposition: bool = True,
+    limit_offhull_examples: int = 5,
+) -> dict[str, Any]:
+    """Real pymatgen PhaseDiagram math for one chemsys.
+
+    Unlike get_phase_diagram (returns MP's tabulated entries), this
+    builds the actual convex hull and computes decomposition products
+    + reaction enthalpies for off-hull entries. Use when a user asks
+    "what would this decompose into?" or "is X synthesizable as a
+    single phase?". Slower than get_phase_diagram (pymatgen-heavy).
+
+    Args:
+        chemsys: dash-separated elements ("Li-Fe-O").
+        include_decomposition: also report decomposition products for
+            the most-stable metastable entries.
+        limit_offhull_examples: how many metastable entries to enrich
+            with decomposition details.
+    """
+    return _compute_phase_diagram_strict(
+        chemsys,
+        include_decomposition=include_decomposition,
+        limit_offhull_examples=limit_offhull_examples,
+    )
+
+
+# ── Multi-criteria ranking ─────────────────────────────────────────────────
+
+
+def pareto_rank(
+    material_ids: list[str],
+    criteria: list[dict[str, Any]],
+    limit: int = 10,
+) -> dict[str, Any]:
+    """Rank candidates by weighted multi-criteria score, flag Pareto-optimal.
+
+    Use this for the FINAL ranking step when you have a shortlist and
+    multiple competing properties. Each criterion is a dict with:
+      - property: "band_gap" | "density" | "energy_above_hull" |
+        "formation_energy_per_atom"
+      - direction: "max" | "min" | "near"
+      - target: float (required when direction="near")
+      - weight: float (defaults to 1.0)
+
+    Returns ranking sorted by descending weighted score, with each
+    entry flagged as Pareto-optimal or not. Lets you justify the
+    shortlist to the user with concrete numbers instead of "I picked
+    these three because they came first".
+
+    Example:
+        pareto_rank(
+            material_ids=["mp-149", "mp-66", "mp-690687"],
+            criteria=[
+                {"property": "band_gap", "direction": "near", "target": 1.5, "weight": 2},
+                {"property": "energy_above_hull", "direction": "min", "weight": 1},
+            ],
+        )
+    """
+    return _pareto_rank(material_ids, criteria, limit=limit)
+
+
+# ── JARVIS-DFT (NIST) ──────────────────────────────────────────────────────
+
+
+def find_2d_materials(
+    elements: list[str] | None = None,
+    max_exfoliation_energy_meV: float | None = None,
+    band_gap_range: tuple[float, float] | None = None,
+    limit: int = 10,
+) -> dict[str, Any]:
+    """Search JARVIS-DFT (NIST) for 2D / layered candidates.
+
+    Use when the user asks about monolayers, 2D materials, exfoliation,
+    MXene, graphene-class, TMDCs. Materials Project does not cover the
+    2D regime; JARVIS does.
+
+    Args:
+        elements: must-contain element symbols.
+        max_exfoliation_energy_meV: cap on exfoliation energy (mJ/m²);
+            < 100 mJ/m² is typically easily exfoliable.
+        band_gap_range: (min, max) OptB88vdW band gap in eV.
+        limit: max candidates.
+    """
+    return _find_2d_materials(
+        elements=elements,
+        max_exfoliation_energy_meV=max_exfoliation_energy_meV,
+        band_gap_range=band_gap_range,
+        limit=limit,
+    )
+
+
+def get_jarvis_topological() -> dict[str, Any]:
+    """List JARVIS-DFT topological materials (TI, Weyl, Dirac semimetals).
+
+    Use when the user asks for topological insulators, Dirac/Weyl
+    semimetals, spin-Hall candidates, Z2 invariants. ~600 entries
+    classified by symmetry-based topological indicators.
+    """
+    return _get_jarvis_topological()
+
+
 # Canonical registry — both MCP server and agent runner iterate over this list.
-#
-# Note on literature tools: Semantic Scholar's anonymous endpoint rate-limits
-# aggressively (HTTP 429 on common queries from a single IP, and HTTP 403 from
-# many cloud-provider egress ranges). We had find_papers / get_papers_about
-# pointing at S2 — useful when they worked, but inconsistent enough to be a
-# trap for a first-time visitor poking the playground. Pulled both from the
-# canonical list and let the agent rely on the two stable literature surfaces:
-# get_doi_metadata (CrossRef, ungated) and find_preprints (arXiv, ungated).
-# The S2-backed functions still exist in literature.py for direct callers who
-# have an API key and want to use them.
 ALL_TOOLS: list[Callable[..., Any]] = [
+    # Property lookup
     search_materials,
     get_material,
     compare_materials,
     check_stability,
+    # Synthesis context
     get_phase_diagram,
     predict_decomposition,
     get_competing_phases,
+    compute_phase_diagram_strict,
+    # Application-tuned discovery (Phase 1 — domain combinators)
+    find_battery_anode,
+    find_battery_cathode,
+    find_solar_absorber,
+    find_thermoelectric,
+    find_transparent_conductor,
+    # Property-sheet expansions
+    get_elastic_properties,
+    get_electronic_summary,
+    # Multi-criteria ranking
+    pareto_rank,
+    # Computational interop
     get_structure,
+    # JARVIS-DFT (NIST) — second DFT source covering 2D / topological
+    find_2d_materials,
+    get_jarvis_topological,
+    # Literature
     get_doi_metadata,
     find_preprints,
 ]
