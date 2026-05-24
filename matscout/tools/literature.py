@@ -25,7 +25,10 @@ from matscout.tools._client import get_cache
 # Polite identifying header — CrossRef/Semantic-Scholar treat named UAs
 # better than anonymous ones. No credentials exposed.
 _UA = "matscout/0.1 (https://matscout.prfo.design; mailto:lev@prfo.design)"
-_TIMEOUT = 12.0
+# arXiv export endpoints can take 10-20s under load from EU; CrossRef is
+# usually <1s; Semantic Scholar varies. 30s gives the slow ones a chance
+# without making the agent feel stuck.
+_TIMEOUT = 30.0
 
 
 def _http_get(
@@ -34,29 +37,45 @@ def _http_get(
     params: dict[str, Any] | None = None,
     max_retries: int = 4,
 ) -> httpx.Response:
-    """GET with exponential back-off on 429s + follow redirects.
+    """GET with retry on transient failures + follow redirects.
 
-    Semantic Scholar throttles anonymous clients tightly (~1 req/sec).
-    arXiv now 301-redirects http → https. We handle both transparently
-    so callers see a single clean response.
+    Retries cover:
+      - 429 (rate limit, Semantic Scholar especially)
+      - ReadTimeout / ConnectTimeout (arXiv is occasionally slow)
+      - 5xx responses (server-side hiccups)
     """
     delay = 1.5
     last: httpx.Response | None = None
+    last_exc: Exception | None = None
     with httpx.Client(
         headers={"User-Agent": _UA},
         timeout=_TIMEOUT,
         follow_redirects=True,
     ) as c:
         for _ in range(max_retries):
-            last = c.get(url, params=params)
-            if last.status_code != 429:
-                return last
-            ra = last.headers.get("retry-after")
-            wait = float(ra) if (ra and ra.replace(".", "", 1).isdigit()) else delay
-            time.sleep(min(wait, 8.0))
-            delay *= 2
-    assert last is not None
-    return last
+            try:
+                last = c.get(url, params=params)
+            except (httpx.ReadTimeout, httpx.ConnectTimeout, httpx.ReadError) as e:
+                last_exc = e
+                time.sleep(delay)
+                delay *= 2
+                continue
+
+            if last.status_code == 429 or last.status_code >= 500:
+                ra = last.headers.get("retry-after")
+                wait = float(ra) if (ra and ra.replace(".", "", 1).isdigit()) else delay
+                time.sleep(min(wait, 8.0))
+                delay *= 2
+                continue
+            return last
+
+    if last is not None:
+        return last
+    # All attempts failed with network errors — synthesize a fake 504 response
+    # so callers have a uniform shape to inspect.
+    raise httpx.ReadTimeout(
+        f"all {max_retries} retries timed out for {url}",
+    ) from last_exc
 
 
 # ── Semantic Scholar ─────────────────────────────────────────────────────────
