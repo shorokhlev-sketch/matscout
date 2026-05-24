@@ -23,13 +23,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from matscout.agent.runner import TraceEvent, stream_agent
-from matscout.research import get_store
+from matscout.research import extract_material_ids, get_store, to_bibtex
 
 STATIC_DIR = Path(__file__).parent / "static"
 RUN_TTL_SECONDS = 600  # how long we keep a finished run around for late pollers
@@ -258,6 +258,39 @@ async def get_research(request_id: str) -> dict[str, Any]:
 async def view_research(request_id: str) -> HTMLResponse:
     """Serve the SPA — the JS sniffs the URL path and replays the saved run."""
     return HTMLResponse((STATIC_DIR / "index.html").read_text(encoding="utf-8"))
+
+
+@app.get("/api/research/{request_id}/citation")
+async def citation_bibtex(request_id: str, request: Request) -> Response:
+    """BibTeX with one @misc per material referenced in the run."""
+    snapshot = get_store().load(request_id)
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail="unknown request_id")
+    base = f"{request.url.scheme}://{request.url.netloc}"
+    bib = to_bibtex(snapshot, base_url=base)
+    return Response(
+        content=bib,
+        media_type="text/plain; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="matscout-{request_id}.bib"',
+        },
+    )
+
+
+@app.get("/api/research/{request_id}/materials")
+async def list_materials(request_id: str) -> dict[str, Any]:
+    """Returns every mp-id mentioned in this run with its MP web URL."""
+    snapshot = get_store().load(request_id)
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail="unknown request_id")
+    from matscout.research import MP_WEB
+
+    ids = extract_material_ids(snapshot)
+    return {
+        "request_id": request_id,
+        "count": len(ids),
+        "materials": [{"material_id": mid, "url": MP_WEB.format(mid)} for mid in ids],
+    }
 
 
 # Mount the SPA at the root. /api/* still wins because FastAPI matches

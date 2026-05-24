@@ -1,4 +1,4 @@
-"""Persistent storage for research sessions.
+"""Persistent storage for research sessions + citation helpers.
 
 Each agent run gets a snapshot: query, locale, full event trace, final
 answer, timestamps. Snapshots live in SQLite alongside the tool-result
@@ -12,11 +12,17 @@ relied on — not a fresh agent run that might give a different answer.
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+# Matches mp-149, mp-123456, mvc-12345 (Materials Project + Vasp Calc db).
+MP_ID_RE = re.compile(r"\b(mp|mvc)-(\d+)\b")
+MP_WEB = "https://next-gen.materialsproject.org/materials/{}"
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS research (
@@ -168,3 +174,83 @@ def set_store(store: ResearchStore | None) -> None:
     """Test hook — inject a tmp-dir store or reset."""
     global _store
     _store = store
+
+
+# ── Citation helpers ─────────────────────────────────────────────────────────
+
+
+def extract_material_ids(snapshot: dict[str, Any]) -> list[str]:
+    """Pull every distinct mp-XXX / mvc-XXX referenced in a run.
+
+    Looks at tool_call args, tool_result summaries, and the final answer.
+    Preserves order of first appearance — handy when the reader scans the
+    citation list top-to-bottom.
+    """
+    seen: dict[str, None] = {}
+
+    def harvest(text: str) -> None:
+        for m in MP_ID_RE.finditer(text):
+            seen.setdefault(f"{m.group(1)}-{m.group(2)}", None)
+
+    for ev in snapshot.get("events", []):
+        if isinstance(ev.get("args"), dict):
+            for v in ev["args"].values():
+                if isinstance(v, str):
+                    harvest(v)
+                elif isinstance(v, list):
+                    for item in v:
+                        if isinstance(item, str):
+                            harvest(item)
+        if isinstance(ev.get("result_summary"), str):
+            harvest(ev["result_summary"])
+        if isinstance(ev.get("content"), str):
+            harvest(ev["content"])
+
+    if snapshot.get("final_answer"):
+        harvest(snapshot["final_answer"])
+
+    return list(seen.keys())
+
+
+def _ts_to_iso(ts: int | float | None) -> str:
+    if ts is None:
+        return ""
+    return datetime.fromtimestamp(int(ts), tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def to_bibtex(snapshot: dict[str, Any], base_url: str = "https://matscout.prfo.design") -> str:
+    """Build a BibTeX export covering the run itself + every referenced mp-id.
+
+    Each MP entry gets the canonical Jain-2013 attribution (the Materials
+    Project's own preferred citation). matscout itself gets a single @misc
+    pointing at the persistent /r/{id} URL.
+    """
+    rid = snapshot["request_id"]
+    ts = _ts_to_iso(snapshot.get("started_at"))
+    year = ts[:4] or "2026"
+    query_clean = (snapshot.get("query") or "").replace("\n", " ").strip()[:200]
+    share_url = f"{base_url}/r/{rid}"
+
+    out: list[str] = []
+    out.append(
+        f"@misc{{matscout-{rid},\n"
+        f"  author       = {{Lev (matscout)}},\n"
+        f"  title        = {{matscout research session: {query_clean}}},\n"
+        f"  year         = {{{year}}},\n"
+        f"  howpublished = {{\\url{{{share_url}}}}},\n"
+        f"  note         = {{Persistent agent run over the Materials Project, accessed {ts}}}\n"
+        f"}}\n"
+    )
+
+    for mid in extract_material_ids(snapshot):
+        out.append(
+            f"@misc{{{mid},\n"
+            f"  author       = {{Jain, Anubhav and Ong, Shyue Ping and Hautier, Geoffroy and Chen, Wei and Richards, William Davidson and Dacek, Stephen and Cholia, Shreyas and Gunter, Dan and Skinner, David and Ceder, Gerbrand and Persson, Kristin A.}},\n"
+            f"  title        = {{{{Materials Project entry {mid}}}}},\n"
+            f"  year         = {{2013}},\n"
+            f"  howpublished = {{\\url{{{MP_WEB.format(mid)}}}}},\n"
+            f"  note         = {{The Materials Project: A materials genome approach to accelerating materials innovation. APL Materials 1(1), 011002 (2013). DOI: 10.1063/1.4812323}}\n"
+            f"}}\n"
+        )
+
+    return "\n".join(out)
