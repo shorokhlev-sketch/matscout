@@ -181,8 +181,14 @@ async function ask(query) {
       }
     }
   } catch (e) {
-    addEvent('tool_error', e.message);
-    setStatus('Error', '');
+    addEvent('tool_error',
+      `Connection dropped during streaming — likely a network blip ` +
+      `(your ISP / a corporate firewall closing long-lived HTTPS streams). ` +
+      `<b>Press <i>Ask matscout</i> again</b>: the SQLite tool-result cache will skip ` +
+      `the previously completed tool calls, so the second run is usually much faster. ` +
+      `<span class="detail">(${e.message})</span>`
+    );
+    setStatus('Connection error · try again', '');
   } finally {
     runBtn.disabled = false;
     stopTimer();

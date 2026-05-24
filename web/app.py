@@ -102,8 +102,13 @@ async def _stream(query: str) -> AsyncIterator[dict[str, Any]]:
 async def query(req: QueryRequest) -> EventSourceResponse:
     return EventSourceResponse(
         _stream(req.query),
+        # SSE-starlette emits a `: ping` comment-line every 15s — keeps the
+        # TCP socket warm against DPI / proxy idle-timeouts (we've seen RU
+        # provider DPI drop streams that go silent > ~60s while gpt-4o is
+        # composing the final answer).
+        ping=15,
         headers={
-            # Tell nginx/proxies not to buffer this response.
+            # Tell nginx and any upstream proxies not to buffer this response.
             "X-Accel-Buffering": "no",
             "Cache-Control": "no-cache, no-transform",
         },
