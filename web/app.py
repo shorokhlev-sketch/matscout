@@ -24,11 +24,12 @@ from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from matscout.agent.runner import TraceEvent, stream_agent
+from matscout.research import get_store
 
 STATIC_DIR = Path(__file__).parent / "static"
 RUN_TTL_SECONDS = 600  # how long we keep a finished run around for late pollers
@@ -106,21 +107,37 @@ def _event_payload(ev: TraceEvent) -> dict[str, Any]:
     return payload
 
 
+def _persist(run: Run) -> None:
+    """Append the current run state to the on-disk research journal."""
+    try:
+        get_store().save(
+            request_id=run.request_id,
+            query=run.query,
+            locale=run.locale,
+            events=run.events,
+            status=run.status,
+            started_at=run.started_at,
+            finished_at=run.finished_at,
+        )
+    except Exception:
+        # Never let storage failures crash an in-flight agent loop.
+        # The in-memory run object is still the source of truth for polling.
+        pass
+
+
 async def _drive_run(run: Run) -> None:
     """Background coroutine — runs the agent and pumps events into ``run.events``."""
     loop = asyncio.get_running_loop()
     # Steer the LLM's natural-language output without touching the tool layer.
     # The system prompt stays English (tool docs / matsci jargon don't benefit
     # from translation); we just bolt on a "respond in <lang>" directive.
-    locale_hint = ""  # noqa: RUF001 — Russian text intentionally embedded
+    locale_hint = ""
     if run.locale == "ru":
-        # ruff RUF001 flags Cyrillic chars as look-alikes of Latin; we want
-        # actual Cyrillic here — silence the rule for this single block.
-        locale_hint = (  # noqa: RUF001
+        locale_hint = (
             "\n\nВажно: финальный ответ пользователю — на русском языке. "  # noqa: RUF001
-            "Технические термины и имена материалов оставляй как есть "  # noqa: RUF001
-            "(band gap, mp-149, Fd-3m, eV/atom). "  # noqa: RUF001
-            "Внутренние tool calls и рассуждения — на английском."  # noqa: RUF001
+            "Технические термины и имена материалов оставляй как есть "
+            "(band gap, mp-149, Fd-3m, eV/atom). "
+            "Внутренние tool calls и рассуждения — на английском."
         )
     from matscout.agent.prompts import SYSTEM_PROMPT_V1
 
@@ -131,6 +148,9 @@ async def _drive_run(run: Run) -> None:
             if ev is None:
                 break
             run.events.append(_event_payload(ev))
+            # Persist after every event so an interrupted server still leaves
+            # a recoverable partial trace on disk.
+            _persist(run)
             if ev.kind == "final":
                 break
     except Exception as e:
@@ -141,6 +161,7 @@ async def _drive_run(run: Run) -> None:
         run.status = "done"
     finally:
         run.finished_at = time.time()
+        _persist(run)
 
 
 async def _gc_old_runs() -> None:
@@ -195,16 +216,48 @@ async def start_query(req: QueryRequest) -> QueryAccepted:
 
 @app.get("/api/query/{request_id}", response_model=PollResponse)
 async def poll_query(request_id: str, since: int = 0) -> PollResponse:
-    """Return all events recorded since index ``since`` for this run."""
+    """Return all events recorded since index ``since`` for this run.
+
+    Tries the in-memory registry first (current TTL window); falls back to
+    the persistent research store so an old session keeps responding to
+    poll requests forever.
+    """
     run = _runs.get(request_id)
-    if run is None:
-        raise HTTPException(status_code=404, detail="unknown request_id (may have expired)")
+    if run is not None:
+        return PollResponse(
+            request_id=request_id,
+            status=run.status,
+            total_events=len(run.events),
+            events=run.events[since:],
+        )
+    persisted = get_store().load(request_id)
+    if persisted is None:
+        raise HTTPException(status_code=404, detail="unknown request_id")
+    events = persisted["events"]
     return PollResponse(
         request_id=request_id,
-        status=run.status,
-        total_events=len(run.events),
-        events=run.events[since:],
+        status=persisted["status"],
+        total_events=len(events),
+        events=events[since:],
     )
+
+
+# ── /r/{id} — permanent snapshot view ────────────────────────────────────────
+
+
+@app.get("/api/research/{request_id}")
+async def get_research(request_id: str) -> dict[str, Any]:
+    """JSON snapshot of a saved research session (everything we know about it)."""
+    persisted = get_store().load(request_id)
+    if persisted is None:
+        raise HTTPException(status_code=404, detail="unknown request_id")
+    return persisted
+
+
+@app.get("/r/{request_id}", response_class=HTMLResponse)
+async def view_research(request_id: str) -> HTMLResponse:
+    """Serve the SPA — the JS sniffs the URL path and replays the saved run."""
+    return HTMLResponse((STATIC_DIR / "index.html").read_text(encoding="utf-8"))
 
 
 # Mount the SPA at the root. /api/* still wins because FastAPI matches

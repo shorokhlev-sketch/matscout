@@ -299,6 +299,76 @@ button.ghost { background: transparent; color: var(--fg-3); }
 .elapsed.live { color: var(--acc); }
 .elapsed.live::before { content: '● '; }
 
+/* Answer-row toolbar (share button) */
+.row-h2 {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.answer-toolbar {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+.toolbar-btn {
+  font-family: var(--sans);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-weight: 600;
+  padding: 5px 10px;
+  background: transparent;
+  color: var(--fg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--rad);
+  cursor: pointer;
+  transition: border-color .12s, color .12s;
+}
+.toolbar-btn:hover { border-color: var(--acc); color: var(--fg); }
+.share-feedback {
+  font-size: 10.5px;
+  color: var(--fg-3);
+}
+.share-feedback.ok { color: var(--ok); }
+.share-feedback code {
+  background: rgba(255,255,255,0.06);
+  padding: 1px 5px;
+  border-radius: 2px;
+  font-size: 10.5px;
+}
+
+/* Snapshot banner — shown when viewing /r/{id} */
+.snapshot-banner {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 9px 12px;
+  margin-bottom: 12px;
+  background: var(--acc-soft);
+  border-left: 3px solid var(--acc);
+  border-radius: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--fg-2);
+}
+.snapshot-banner code {
+  background: rgba(0,0,0,0.3);
+  padding: 1px 5px;
+  border-radius: 2px;
+  font-size: 10px;
+  margin: 0 4px;
+}
+.snapshot-banner a {
+  color: var(--acc);
+  text-decoration: none;
+  font-weight: 600;
+}
+.snapshot-banner a:hover { color: var(--acc-2); }
+
 #answer {
   margin-top: 14px;
   padding: 18px 20px;

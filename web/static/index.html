@@ -59,7 +59,15 @@
     <div id="trace"></div>
     <div id="status" class="status"></div>
 
-    <h2 data-i18n="right.answerHeader">Answer</h2>
+    <h2 class="row-h2">
+      <span data-i18n="right.answerHeader">Answer</span>
+      <span class="answer-toolbar">
+        <button id="share-btn" class="toolbar-btn" type="button" hidden>
+          <span data-i18n="right.shareBtn">Share research →</span>
+        </button>
+        <span id="share-feedback" class="share-feedback mono"></span>
+      </span>
+    </h2>
     <div id="answer"></div>
   </section>
 </main>
@@ -83,6 +91,11 @@ const I18N = {
     'left.placeholder': 'Find a stable semiconductor with band gap near 1.5 eV for a solar cell. Give me three candidates with their formula, band gap, and density.',
     'right.traceHeader': 'Agent trace',
     'right.answerHeader': 'Answer',
+    'right.shareBtn': 'Share research →',
+    'share.copied': 'Link copied — paste it into your notes / footnote.',
+    'share.failed': 'Could not copy. Select the URL manually:',
+    'snapshot.banner': 'Viewing a saved research snapshot.',
+    'snapshot.newRun': 'Start a new run',
     'answer.empty': 'Answer will appear here.',
     'status.starting': 'Starting agent…',
     'status.polling': 'Polling for events…',
@@ -117,6 +130,11 @@ const I18N = {
     'left.placeholder': 'Найди стабильный полупроводник с band gap около 1.5 эВ под солнечную ячейку. Три кандидата с формулой, band gap и плотностью.',
     'right.traceHeader': 'Трейс агента',
     'right.answerHeader': 'Ответ',
+    'right.shareBtn': 'Поделиться →',
+    'share.copied': 'Ссылка скопирована — вставьте в заметки / сноску.',
+    'share.failed': 'Не получилось скопировать. Выделите ссылку вручную:',
+    'snapshot.banner': 'Открыт сохранённый снимок исследования.',
+    'snapshot.newRun': 'Новый запрос',
     'answer.empty': 'Здесь появится ответ.',
     'status.starting': 'Запуск агента…',
     'status.polling': 'Опрос событий…',
@@ -265,6 +283,7 @@ async function ask(query) {
   trace.innerHTML = '';
   answerEl.innerHTML = '';
   pendingEvent = null;
+  hideShareButton();
   setStatus(t('status.starting'), 'live');
   startTimer();
   runBtn.disabled = true;
@@ -282,6 +301,7 @@ async function ask(query) {
     }
     const data = await resp.json();
     requestId = data.request_id;
+    window._lastRunId = requestId;
     setStatus(t('status.polling'), 'live');
   } catch (e) {
     addEvent('tool_error', `${t('startFail')}: ${e.message}`);
@@ -382,6 +402,8 @@ function handleEvent(kind, p) {
     const elapsed = fmtElapsed(performance.now() - queryStart);
     setStatus(t('status.done', ncalls, elapsed), 'done');
     stopTimer();
+    // Run id was captured in ask(); make it shareable now.
+    if (window._lastRunId) showShareButton(window._lastRunId);
   }
 }
 
@@ -405,8 +427,84 @@ $('#q').addEventListener('keydown', (e) => {
   }
 });
 
+// ── share-link logic ──────────────────────────────────────────────────────
+let currentRunId = null;
+
+function showShareButton(rid) {
+  currentRunId = rid;
+  const btn = $('#share-btn');
+  btn.hidden = false;
+}
+function hideShareButton() {
+  currentRunId = null;
+  $('#share-btn').hidden = true;
+  $('#share-feedback').textContent = '';
+}
+
+$('#share-btn').addEventListener('click', async () => {
+  if (!currentRunId) return;
+  const url = `${location.origin}/r/${currentRunId}`;
+  const fb = $('#share-feedback');
+  try {
+    await navigator.clipboard.writeText(url);
+    fb.textContent = t('share.copied');
+    fb.classList.add('ok');
+    setTimeout(() => { fb.textContent = ''; fb.classList.remove('ok'); }, 4000);
+  } catch {
+    fb.innerHTML = `${t('share.failed')} <code>${url}</code>`;
+  }
+});
+
+// ── snapshot-replay (when path is /r/{id}) ────────────────────────────────
+async function maybeReplaySnapshot() {
+  const m = location.pathname.match(/^\/r\/([a-f0-9]+)$/i);
+  if (!m) return false;
+  const rid = m[1];
+  startTimer();  // re-uses the existing elapsed widget — shows total snapshot age
+  $('#q').setAttribute('readonly', 'readonly');
+  setStatus('Loading snapshot…', 'live');
+
+  let snap;
+  try {
+    const r = await fetch(`/api/research/${rid}`, { cache: 'no-store' });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    snap = await r.json();
+  } catch (e) {
+    setStatus(`Snapshot not found: ${e.message}`, '');
+    stopTimer();
+    return true;
+  }
+
+  // Restore the query input + locale
+  $('#q').value = snap.query;
+  if (snap.locale && SUPPORTED_LOCALES.includes(snap.locale)) {
+    LOCALE = snap.locale;
+    localStorage.setItem('matscout.locale', LOCALE);
+    applyI18n();
+  }
+
+  // Banner over the trace
+  const banner = document.createElement('div');
+  banner.className = 'snapshot-banner';
+  const ageMs = Date.now() - (snap.started_at * 1000);
+  banner.innerHTML =
+    `<span>${t('snapshot.banner')} ` +
+    `<code>${rid}</code> · ` +
+    `${new Date(snap.started_at * 1000).toISOString().replace('T', ' ').slice(0, 16)} UTC</span>` +
+    `<a href="/">${t('snapshot.newRun')} →</a>`;
+  trace.parentNode.insertBefore(banner, trace);
+
+  // Replay events
+  for (const ev of snap.events) handleEvent(ev.kind, ev);
+  stopTimer();
+  runBtn.disabled = true;
+  showShareButton(rid);
+  return true;
+}
+
 // First paint
 applyI18n();
+maybeReplaySnapshot();
 </script>
 </body>
 </html>
