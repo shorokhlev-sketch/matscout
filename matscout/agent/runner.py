@@ -55,7 +55,11 @@ _DISCOVERY_TOOL_NAMES: list[str] = [
     "find_transparent_conductor",
     "find_2d_materials",
     "get_jarvis_topological",
+    "find_cod_experimental",
+    "optimade_search",
     "find_preprints",
+    "search_openalex",
+    "get_wikipedia_summary",
 ]
 _ANALYSIS_TOOL_NAMES: list[str] = [
     "get_material",
@@ -71,9 +75,13 @@ _ANALYSIS_TOOL_NAMES: list[str] = [
     "get_structure",
     "get_doi_metadata",
     "find_preprints",
-    # Cross-validation: analysis phase may also pull from JARVIS again
+    "search_openalex",
+    "get_wikipedia_summary",
+    # Cross-validation: analysis phase may also re-query
     "find_2d_materials",
     "get_jarvis_topological",
+    "find_cod_experimental",
+    "optimade_search",
 ]
 
 
@@ -266,6 +274,7 @@ def stream_agent(
     *,
     model: str = DEFAULT_MODEL,
     system_prompt: str = SYSTEM_PROMPT_V1,
+    locale_hint: str = "",
     client: OpenAI | None = None,
     previous_response_id: str | None = None,
     mcp_server_url: str = DEFAULT_MCP_SERVER_URL,
@@ -304,7 +313,7 @@ def stream_agent(
     if prior_messages or single_phase:
         yield from _stream_phase(
             query=query,
-            instructions=system_prompt,
+            instructions=system_prompt + locale_hint,
             allowed_tool_names=None,
             max_tool_calls=25,
             client=client,
@@ -327,7 +336,7 @@ def stream_agent(
     stage1_response_id: str | None = None
     for ev in _stream_phase(
         query=query,
-        instructions=SYSTEM_PROMPT_DISCOVERY,
+        instructions=SYSTEM_PROMPT_DISCOVERY + locale_hint,
         allowed_tool_names=_DISCOVERY_TOOL_NAMES,
         max_tool_calls=10,
         client=client,
@@ -363,7 +372,7 @@ def stream_agent(
     )
     yield from _stream_phase(
         query=analysis_input,
-        instructions=SYSTEM_PROMPT_ANALYSIS,
+        instructions=SYSTEM_PROMPT_ANALYSIS + locale_hint,
         allowed_tool_names=_ANALYSIS_TOOL_NAMES,
         max_tool_calls=25,
         client=client,

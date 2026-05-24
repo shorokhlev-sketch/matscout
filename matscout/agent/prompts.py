@@ -42,9 +42,18 @@ Do NOT give a recommendation. Just produce a clean candidate set.
    - "solar absorber" / "photovoltaic" → find_solar_absorber
    - "thermoelectric" / "Seebeck" / "ZT" → find_thermoelectric
    - "transparent conductor" / "TCO" → find_transparent_conductor
-   - "2D material" / "monolayer" / "MXene" → find_2d_materials (JARVIS)
+   - "2D material" / "monolayer" / "MXene" → find_2d_materials
    - "topological insulator" / "Weyl" / "Dirac semimetal"
      → get_jarvis_topological
+
+   Cross-source aggregation:
+   - "compare across databases" / "what does AFLOW / COD say" /
+     "cross-validate against another DFT source" → optimade_search
+     (queries MP + AFLOW + COD + JARVIS + Materials Cloud at once)
+   - "experimental refinement" / "measured" / "real crystal" /
+     "synthesised" → find_cod_experimental
+   - General textbook definition (Shockley-Queisser limit,
+     Wadsley-Roth phase, etc.) → get_wikipedia_summary
 
 2. Otherwise use search_materials with sensible defaults inferred
    from materials-science context (see units / ranges below).
@@ -125,11 +134,13 @@ the final answer.
    - "topological" / "Weyl" / "Dirac" → get_jarvis_topological
    - "2D" / "monolayer" / "MXene" → find_2d_materials
    - "synthesis pathway" / "decomposition" → compute_phase_diagram_strict
-   - "recent research" → find_preprints
+   - "has this been synthesised" / "experimental" → find_cod_experimental
+   - "what does AFLOW / OQMD say" → optimade_search across providers
+   - "recent research" / "literature" → find_preprints OR search_openalex
    If none of those tags fit the user's query, SKIP cross-validation —
-   write the answer with what you have. JARVIS tools occasionally
-   return "JARVIS unavailable" payloads; treat that as a no-op and
-   move on.
+   write the answer with what you have. External sources occasionally
+   return "unavailable" payloads (JARVIS often does); treat that as a
+   no-op and move on.
 
 3. **Rank with pareto_rank for the FINAL shortlist** when you have
    ≥3 candidates with ≥2 competing properties. Pass explicit criteria

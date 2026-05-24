@@ -76,9 +76,7 @@ def pareto_rank(
         # Drop rows missing data on any required criterion.
         if any(raw_props[c["property"]] is None for c in criteria):
             continue
-        props: dict[str, float] = {
-            k: float(v) for k, v in raw_props.items() if v is not None
-        }
+        props: dict[str, float] = {k: float(v) for k, v in raw_props.items() if v is not None}
         rows.append((cand, props))
 
     if not rows:

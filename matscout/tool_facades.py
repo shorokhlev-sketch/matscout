@@ -36,6 +36,9 @@ from matscout.tools import (
     find_battery_cathode as _find_battery_cathode,
 )
 from matscout.tools import (
+    find_cod_experimental as _find_cod_experimental,
+)
+from matscout.tools import (
     find_papers as _find_papers,
 )
 from matscout.tools import (
@@ -78,6 +81,12 @@ from matscout.tools import (
     get_structure as _get_structure,
 )
 from matscout.tools import (
+    get_wikipedia_summary as _get_wikipedia_summary,
+)
+from matscout.tools import (
+    optimade_search as _optimade_search,
+)
+from matscout.tools import (
     pareto_rank as _pareto_rank,
 )
 from matscout.tools import (
@@ -85,6 +94,9 @@ from matscout.tools import (
 )
 from matscout.tools import (
     search_materials as _search_materials,
+)
+from matscout.tools import (
+    search_openalex as _search_openalex,
 )
 
 
@@ -515,6 +527,117 @@ def get_jarvis_topological() -> dict[str, Any]:
     return _get_jarvis_topological()
 
 
+# ── Federated cross-source search (OPTIMADE) ──────────────────────────────
+
+
+def optimade_search(
+    optimade_filter: str,
+    providers: list[str] | None = None,
+    page_limit: int = 5,
+) -> dict[str, Any]:
+    """Federated OPTIMADE search across multiple materials databases.
+
+    OPTIMADE is a standardised REST protocol that 10+ providers all
+    speak. One filter, many sources. Use when you want cross-source
+    coverage (catch entries that MP missed but OQMD has) or
+    experimental ground truth alongside DFT predictions.
+
+    Args:
+        optimade_filter: OPTIMADE filter-language string, e.g.
+            ``'elements HAS "Si" AND nelements=1'`` (pure Si) or
+            ``'chemical_formula_reduced="Fe2O3"'``.
+        providers: which providers to query. Defaults to all curated.
+            Recognised: ``mp``, ``aflow``, ``cod``, ``jarvis``,
+            ``mcloud``, ``odbx``, ``mpdd``.
+        page_limit: max hits per provider (1-50).
+    """
+    return _optimade_search(
+        optimade_filter,
+        providers=providers,
+        page_limit=page_limit,
+    )
+
+
+# ── Experimental crystal structures (COD direct) ───────────────────────────
+
+
+def find_cod_experimental(
+    elements: list[str] | None = None,
+    chemical_formula: str | None = None,
+    space_group_number: int | None = None,
+    limit: int = 8,
+) -> dict[str, Any]:
+    """Search Crystallography Open Database — experimental refinements.
+
+    COD entries are EXPERIMENTAL crystal structures from X-ray /
+    neutron diffraction refinements, not DFT predictions. Use this to
+    cross-check DFT databases (MP / AFLOW / JARVIS) against
+    real-world ground truth, or to answer "has this been synthesized".
+
+    Args:
+        elements: must-contain element symbols.
+        chemical_formula: reduced formula (e.g. ``"Fe2O3"``).
+        space_group_number: International space-group number (1-230).
+        limit: max entries.
+    """
+    return _find_cod_experimental(
+        elements=elements,
+        chemical_formula=chemical_formula,
+        space_group_number=space_group_number,
+        limit=limit,
+    )
+
+
+# ── Literature: OpenAlex (240M+ works, stable replacement for S2) ──────────
+
+
+def search_openalex(
+    query: str,
+    year_from: int | None = None,
+    min_cited_by: int | None = None,
+    limit: int = 8,
+) -> dict[str, Any]:
+    """Search OpenAlex for papers matching a free-text query.
+
+    OpenAlex covers 240M+ scholarly works with title / authors / year /
+    DOI / abstract / cited-by metadata. Free REST, no API key, no
+    rate-limit pain (unlike Semantic Scholar from cloud egress). Use
+    this whenever the user wants journal-style references instead of
+    just arXiv preprints.
+
+    Args:
+        query: free-text search.
+        year_from: minimum publication year.
+        min_cited_by: minimum citation count.
+        limit: max papers (1-25).
+    """
+    return _search_openalex(
+        query,
+        year_from=year_from,
+        min_cited_by=min_cited_by,
+        limit=limit,
+    )
+
+
+# ── Wikipedia (textbook context / definitions only) ────────────────────────
+
+
+def get_wikipedia_summary(title: str, lang: str = "en") -> dict[str, Any]:
+    """One-paragraph Wikipedia lead — for definitions and historical context.
+
+    Use sparingly. Wikipedia is fine for "what is the Shockley-Queisser
+    limit" / "what is a Wadsley-Roth phase" — pop-science definitions
+    the DFT databases don't carry. Do NOT cite numerical claims from
+    Wikipedia without cross-checking against MP / JARVIS / CrossRef /
+    arXiv.
+
+    Args:
+        title: article title or natural-language redirect target.
+        lang: language code ("en", "ru", ...).
+    """
+    return _get_wikipedia_summary(title, lang=lang)
+
+
 # Canonical registry — both MCP server and agent runner iterate over this list.
 ALL_TOOLS: list[Callable[..., Any]] = [
     # Property lookup
@@ -543,7 +666,13 @@ ALL_TOOLS: list[Callable[..., Any]] = [
     # JARVIS-DFT (NIST) — second DFT source covering 2D / topological
     find_2d_materials,
     get_jarvis_topological,
-    # Literature
+    # Federated cross-source search (OPTIMADE: MP + AFLOW + COD + JARVIS + …)
+    optimade_search,
+    # Experimental crystal structures (COD direct)
+    find_cod_experimental,
+    # Literature (CrossRef, arXiv, OpenAlex, Wikipedia)
     get_doi_metadata,
     find_preprints,
+    search_openalex,
+    get_wikipedia_summary,
 ]

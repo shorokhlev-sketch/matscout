@@ -367,7 +367,8 @@ async def _drive_run(run: Run) -> None:
 
     gen = stream_agent(
         run.query,
-        system_prompt=SYSTEM_PROMPT_V1 + locale_hint,
+        system_prompt=SYSTEM_PROMPT_V1,
+        locale_hint=locale_hint,
         previous_response_id=previous_response_id,
         prior_messages=prior_messages,
     )
