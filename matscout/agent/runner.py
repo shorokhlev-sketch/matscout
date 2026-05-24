@@ -71,6 +71,131 @@ class AgentResult:
     turns: int = 0
 
 
+def _synthesize_narration(
+    name: str, args: dict[str, Any], recent_calls: list[tuple[str, dict[str, Any]]]
+) -> tuple[str, str]:
+    """Build a (kind, sentence) from a tool name + args.
+
+    Used as a fallback when the model didn't write a between-tool
+    narration itself. The UI shows these the same way as model-written
+    narrations, so a non-technical viewer always sees a human-readable
+    sentence per agent decision instead of a bare function call.
+
+    Also detects the "model just retried the same tool with looser
+    args" pattern and emits an ``adaptation`` event for it.
+    """
+    # Adaptation detection: same tool name as the previous call, with
+    # a wider band-gap or e-above-hull window, OR with `only_stable`
+    # dropped, OR with `limit` bumped.
+    if recent_calls:
+        prev_name, prev_args = recent_calls[-1]
+        if prev_name == name:
+            change = _diff_for_adaptation(prev_args, args)
+            if change:
+                return "adaptation", f"Adapting: {change}"
+
+    if name == "search_materials":
+        return "reasoning", _summarize_search(args)
+    if name == "get_material":
+        mid = args.get("material_id", "?")
+        return "reasoning", f"Pulling full property sheet for {mid}."
+    if name == "check_stability":
+        mid = args.get("material_id", "?")
+        return "reasoning", f"Checking convex-hull position for {mid}."
+    if name == "compare_materials":
+        ids = args.get("material_ids", []) or []
+        return "reasoning", f"Building side-by-side comparison of {len(ids)} candidates."
+    if name == "get_phase_diagram":
+        cs = args.get("chemsys", "?")
+        return "reasoning", f"Loading the {cs} phase diagram."
+    if name == "predict_decomposition":
+        mid = args.get("material_id", "?")
+        return "reasoning", f"Predicting decomposition products of {mid}."
+    if name == "get_competing_phases":
+        f = args.get("formula", "?")
+        return "reasoning", f"Looking for competing phases around {f}."
+    if name == "get_structure":
+        mid = args.get("material_id", "?")
+        fmt = args.get("fmt", "cif").upper()
+        return "reasoning", f"Exporting {mid} crystal structure as {fmt}."
+    if name == "get_doi_metadata":
+        doi = args.get("doi", "?")
+        return "reasoning", f"Resolving DOI {doi} via CrossRef."
+    if name == "find_preprints":
+        q = (args.get("query") or "?")[:50]
+        return "reasoning", f'Searching arXiv preprints for "{q}".'
+    return "reasoning", f"Calling {name}."
+
+
+def _summarize_search(args: dict[str, Any]) -> str:
+    parts: list[str] = []
+    if (bg := args.get("band_gap_range")) and isinstance(bg, list | tuple) and len(bg) == 2:
+        parts.append(f"band gap {bg[0]}-{bg[1]} eV")
+    if (els := args.get("elements")) and isinstance(els, list):
+        parts.append(f"containing {', '.join(els)}")
+    if (xe := args.get("exclude_elements")) and isinstance(xe, list):
+        parts.append(f"excluding {', '.join(xe)}")
+    if (d := args.get("density_range")) and isinstance(d, list | tuple) and len(d) == 2:
+        parts.append(f"density {d[0]}-{d[1]} g/cm³")
+    if args.get("only_stable"):
+        parts.append("stable only")
+    if args.get("is_metal") is True:
+        parts.append("metallic")
+    if args.get("is_metal") is False:
+        parts.append("non-metallic")
+    if (n := args.get("num_elements")) is not None:
+        parts.append(f"{n}-element systems")
+    descriptor = ", ".join(parts) if parts else "broad filter"
+    return f"Searching the Materials Project for candidates ({descriptor})."
+
+
+def _diff_for_adaptation(prev: dict[str, Any], curr: dict[str, Any]) -> str | None:
+    """Detect the meaningful 'relaxation' between two consecutive calls."""
+
+    def _width(r: Any) -> float | None:
+        if isinstance(r, list | tuple) and len(r) == 2:
+            try:
+                return float(r[1]) - float(r[0])
+            except (TypeError, ValueError):
+                return None
+        return None
+
+    # Band-gap window widened
+    pw = _width(prev.get("band_gap_range"))
+    cw = _width(curr.get("band_gap_range"))
+    if pw is not None and cw is not None and cw > pw + 0.05:
+        pbg = prev.get("band_gap_range")
+        cbg = curr.get("band_gap_range")
+        return f"got too few hits, widening band gap window from {pbg} to {cbg}."
+
+    # Density window widened
+    pw = _width(prev.get("density_range"))
+    cw = _width(curr.get("density_range"))
+    if pw is not None and cw is not None and cw > pw + 0.1:
+        return (
+            f"widening density window from {prev.get('density_range')} "
+            f"to {curr.get('density_range')}."
+        )
+
+    # only_stable dropped
+    if prev.get("only_stable") and not curr.get("only_stable"):
+        return "no stable hits, allowing metastable phases this time."
+
+    # max_energy_above_hull raised
+    pmh = prev.get("max_energy_above_hull")
+    cmh = curr.get("max_energy_above_hull")
+    if isinstance(pmh, int | float) and isinstance(cmh, int | float) and cmh > pmh:
+        return f"raising the energy_above_hull cap from {pmh} to {cmh} eV/atom."
+
+    # limit lowered (tightening) — heuristic for >50 hit case
+    pl = prev.get("limit")
+    cl = curr.get("limit")
+    if isinstance(pl, int) and isinstance(cl, int) and cl < pl // 2:
+        return f"too many hits, tightening limit from {pl} to {cl}."
+
+    return None
+
+
 def run_agent(
     query: str,
     *,
@@ -175,13 +300,45 @@ def stream_agent(
         content="Planning next step (via MCP)…",
     )
 
-    # Streaming pass. We track partial items by output_index so a
-    # tool_call event fires the moment the model starts calling a tool,
-    # and the corresponding tool_result fires when that item finishes.
+    # Recent tool-call history — used to detect "the model just retried
+    # the same tool with widened args", which deserves an adaptation
+    # event even when the model didn't write a narration itself.
+    recent_calls: list[tuple[str, dict[str, Any]]] = []
+
+    # ── Streaming pass ───────────────────────────────────────────────
+    #
+    # We translate OpenAI Responses stream events to our TraceEvent shape
+    # in real time. Three pieces of state worth knowing about:
+    #
+    # 1. ``pending_calls`` accumulates streamed argument deltas per
+    #    output_index for each mcp_call item, so we can populate the
+    #    `tool_call` event with full args at the moment the call is
+    #    actually dispatched (rather than firing tool_call with empty
+    #    args on output_item.added before the args arrive).
+    #
+    # 2. ``message_texts`` accumulates per-output_index text fragments.
+    #    Responses can produce several `message` items in a single
+    #    response — intermediate ones are narrations between tool calls
+    #    (the system prompt instructs the model to do this), the very
+    #    last one is the final answer. We don't know during streaming
+    #    which message is the last, so we use one-message lookahead
+    #    (``held_message_idx``) — a finished message is held until the
+    #    NEXT activity (another item.added, another item.done, or
+    #    response.completed) confirms whether it was narration or final.
+    #
+    # 3. ``response_id`` is captured up front so the terminal `final`
+    #    event can carry it back for conversation continuation.
     pending_calls: dict[int, dict[str, Any]] = {}
-    answer_parts: list[str] = []
+    message_texts: dict[int, str] = {}
+    held_message_idx: int | None = None
     response_id: str | None = None
-    saw_first_text = False
+
+    def _classify_message(text: str) -> str:
+        """'adaptation' for self-correction narrations, 'reasoning' otherwise."""
+        head = text.lstrip()[:30].lower()
+        if head.startswith("adapting:") or head.startswith("adapt:"):
+            return "adaptation"
+        return "reasoning"
 
     try:
         stream = client.responses.create(
@@ -205,12 +362,30 @@ def stream_agent(
         )
         return
 
+    def _flush_held_as_narration() -> Iterator[TraceEvent]:
+        """Flush the held intermediate message as reasoning / adaptation."""
+        nonlocal held_message_idx
+        if held_message_idx is None:
+            return
+        text = (message_texts.get(held_message_idx, "") or "").strip()
+        idx = held_message_idx
+        held_message_idx = None
+        if not text:
+            return
+        kind = _classify_message(text)
+        yield TraceEvent(kind=kind, content=text, turn=idx)
+
     for event in stream:
         etype = getattr(event, "type", "")
+
         if etype == "response.created":
             response_id = getattr(getattr(event, "response", None), "id", None)
 
         elif etype == "response.output_item.added":
+            # New output item starting. If we were holding a previous
+            # message item, it's now confirmed intermediate — flush it
+            # as narration before processing the new item.
+            yield from _flush_held_as_narration()
             item = getattr(event, "item", None)
             idx = getattr(event, "output_index", None)
             if item is None or idx is None:
@@ -219,21 +394,52 @@ def stream_agent(
             if it_type == "mcp_call":
                 name = getattr(item, "name", "?")
                 pending_calls[idx] = {"name": name, "args_json": ""}
-                # Args may stream in via mcp_call_arguments.delta — for
-                # the polling UI we emit tool_call now with an empty
-                # args dict; the args themselves will appear in the
-                # later tool_result. (The current UI shows args from
-                # tool_call but if they're missing it just shows the
-                # name, which is acceptable.)
-                yield TraceEvent(kind="tool_call", name=name, args={})
+                # Don't emit tool_call here — args aren't ready yet.
+                # We'll emit on mcp_call_arguments.done with full args.
 
         elif etype == "response.mcp_call_arguments.delta":
-            # Concatenate streamed arg fragments into the pending call
-            # so we can attach them to the tool_result.
             idx = getattr(event, "output_index", None)
             delta = getattr(event, "delta", "") or ""
             if idx is not None and idx in pending_calls:
                 pending_calls[idx]["args_json"] += delta
+
+        elif etype == "response.mcp_call_arguments.done":
+            # Args fully streamed — NOW we can emit a populated tool_call
+            # event. This is the moment the call is actually dispatched
+            # to the MCP server.
+            idx = getattr(event, "output_index", None)
+            if idx is not None and idx in pending_calls:
+                pending = pending_calls[idx]
+                args_str = pending.get("args_json", "")
+                try:
+                    args_obj = json.loads(args_str) if args_str else {}
+                except json.JSONDecodeError:
+                    args_obj = {"_raw": args_str}
+                pending["args"] = args_obj  # remembered for tool_result later
+                name = pending["name"]
+
+                # Either flush the model's own narration (if it wrote
+                # one before this call) — or, when the model went
+                # straight to a tool, synthesize a deterministic
+                # narration from the tool name + args. Either way the
+                # human sees a sentence per agent decision.
+                if held_message_idx is not None:
+                    yield from _flush_held_as_narration()
+                else:
+                    syn_kind, syn_text = _synthesize_narration(name, args_obj, recent_calls)
+                    if syn_text:
+                        yield TraceEvent(kind=syn_kind, content=syn_text)
+
+                recent_calls.append((name, args_obj))
+                yield TraceEvent(kind="tool_call", name=name, args=args_obj)
+
+        elif etype == "response.output_text.delta":
+            # Stream raw text into the per-item buffer; we'll decide
+            # later whether the whole item is narration or final.
+            idx = getattr(event, "output_index", None)
+            delta = getattr(event, "delta", "") or ""
+            if idx is not None and delta:
+                message_texts[idx] = message_texts.get(idx, "") + delta
 
         elif etype == "response.output_item.done":
             item = getattr(event, "item", None)
@@ -242,13 +448,15 @@ def stream_agent(
                 continue
             it_type = getattr(item, "type", None)
             if it_type == "mcp_call":
+                # A tool result has come back from the MCP server. Flush
+                # any held narration first (it was the "thinking before
+                # this call"), then emit the result.
+                yield from _flush_held_as_narration()
                 name = getattr(item, "name", "?")
                 output_str = getattr(item, "output", None) or ""
                 err = getattr(item, "error", None)
                 pending = pending_calls.pop(idx, {"args_json": ""})
-                # args might come from the item itself (final), fall
-                # back to the streamed accumulation.
-                args_str = getattr(item, "arguments", None) or pending.get("args_json", "") or ""
+                args_str = getattr(item, "arguments", None) or pending.get("args_json", "")
                 try:
                     args_obj = json.loads(args_str) if args_str else {}
                 except json.JSONDecodeError:
@@ -259,39 +467,40 @@ def stream_agent(
                     result_obj = output_str
 
                 if err:
-                    yield TraceEvent(
-                        kind="tool_error",
-                        name=name,
-                        args=args_obj,
-                        error=str(err),
-                    )
+                    yield TraceEvent(kind="tool_error", name=name, args=args_obj, error=str(err))
                 else:
                     yield TraceEvent(
-                        kind="tool_result",
-                        name=name,
-                        args=args_obj,
-                        result=result_obj,
+                        kind="tool_result", name=name, args=args_obj, result=result_obj
                     )
             elif it_type == "message":
-                # Message item finishing — the text was already streamed
-                # via output_text.delta into answer_parts; no extra event
-                # needed here.
-                pass
-
-        elif etype == "response.output_text.delta":
-            delta = getattr(event, "delta", "") or ""
-            if delta:
-                if not saw_first_text:
-                    saw_first_text = True
-                    yield TraceEvent(
-                        kind="thinking",
-                        turn=2,
-                        content="Composing answer…",
-                    )
-                answer_parts.append(delta)
+                # Finished message — hold it; if another item follows
+                # (or response.completed says it was the last), we'll
+                # then classify it as narration or final.
+                yield from _flush_held_as_narration()
+                held_message_idx = idx
 
         elif etype == "response.completed":
-            final_text = "".join(answer_parts)
+            # End of stream. Whatever's still held is the final answer —
+            # UNLESS the agent never made a single tool call (it ended
+            # right after planning), in which case the held message is
+            # really intermediate narration and we say so.
+            if held_message_idx is not None:
+                final_text = (message_texts.get(held_message_idx, "") or "").strip()
+                held_message_idx = None
+            else:
+                final_text = "\n\n".join(
+                    (message_texts[k] or "").strip() for k in sorted(message_texts.keys())
+                ).strip()
+
+            if not recent_calls and final_text and len(final_text) < 250:
+                # Model ended after a single short text and zero tool
+                # calls. Surface the text as narration and replace the
+                # "final" with an honest note about the glitch.
+                yield TraceEvent(kind="reasoning", content=final_text)
+                final_text = (
+                    "The agent ended its turn after planning without calling any tools "
+                    "— this is a rare model glitch. Please rerun the same query."
+                )
             yield TraceEvent(kind="final", content=final_text, response_id=response_id)
             return
 
@@ -310,8 +519,9 @@ def stream_agent(
 
     # If the stream ended without an explicit response.completed (rare),
     # still emit a final so the polling client doesn't hang.
+    yield from _flush_held_as_narration()
     yield TraceEvent(
         kind="final",
-        content="".join(answer_parts) or "(stream ended without a completed response)",
+        content="(stream ended without a completed response)",
         response_id=response_id,
     )

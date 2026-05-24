@@ -286,6 +286,57 @@ button.ghost { background: transparent; color: var(--fg-3); }
 .ev.tool_result .badge { color: var(--ok); }
 .ev.tool_error    { border-left-color: var(--err); }
 .ev.tool_error .badge  { color: var(--err); }
+
+/* Agent narration — short between-tool sentences. Softer than tool_call,
+   meant to read as "thinking out loud." Italics + serif for contrast
+   with the mono tool/result rows. */
+.ev.reasoning {
+  border-left-color: var(--border-hi);
+  font-family: var(--sans);
+  font-style: italic;
+  font-size: 12.5px;
+  color: var(--fg-2);
+  letter-spacing: 0;
+  padding-left: 14px;
+}
+.ev.reasoning .badge {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-style: normal;
+  letter-spacing: 0.14em;
+  color: var(--fg-4);
+  font-weight: 500;
+  text-transform: lowercase;
+}
+.ev.reasoning .badge::before { content: '💭 '; font-style: normal; }
+.ev.reasoning .detail { color: var(--fg); word-break: break-word; }
+
+/* Self-correction marker — amber, with the rotation glyph. Lands when
+   the agent widens a filter or drops a constraint after 0 hits / too
+   many hits. */
+.ev.adaptation {
+  border-left-color: var(--acc);
+  background: linear-gradient(90deg, var(--acc-soft) 0%, transparent 40%);
+  font-family: var(--sans);
+  font-size: 12.5px;
+  color: var(--fg);
+  padding-left: 14px;
+}
+.ev.adaptation .badge {
+  background: var(--acc);
+  color: #14140d;
+  letter-spacing: 0.14em;
+  font-weight: 700;
+}
+.ev.adaptation .badge-label {
+  color: var(--acc);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  margin-right: 8px;
+  font-size: 12.5px;
+}
+.ev.adaptation .detail { color: var(--fg); word-break: break-word; }
 .ev .name { color: var(--fg); font-weight: 600; }
 .ev .kv { color: var(--fg-3); margin-right: 6px; }
 .ev .kv .k { color: var(--fg-2); }

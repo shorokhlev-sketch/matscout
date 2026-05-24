@@ -883,6 +883,19 @@ function handleEvent(kind, p) {
       `<span class="name">turn ${p.turn || '?'}</span> <span class="detail">${escAttr(content)}</span>`,
       { live: true });
     setStatus(t('status.thinking', p.turn), 'live');
+  } else if (p.kind === 'reasoning') {
+    // Agent narration — what the model is about to do, or a synthetic
+    // sentence we generated from the tool name + args when the model
+    // skipped its own narration.
+    addEvent('reasoning',
+      `<span class="detail">${escAttr(p.content || '')}</span>`);
+  } else if (p.kind === 'adaptation') {
+    // Self-correction event — model widened a filter after 0 hits, or
+    // server-side detected a retry-with-relaxed-args. Distinguished
+    // visually so the viewer sees the agent adjusting course.
+    addEvent('adaptation',
+      `<span class="badge-label">↻ Adapting</span>` +
+      `<span class="detail">${escAttr((p.content || '').replace(/^Adapting:\s*/i, ''))}</span>`);
   } else if (p.kind === 'tool_call') {
     pendingEvent = addEvent('tool_call',
       `<span class="name">${p.name}</span><span class="detail">${fmtArgs(p.args)}</span>`,
