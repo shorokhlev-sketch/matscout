@@ -77,12 +77,11 @@ def _phase_diagram_viz(result: dict[str, Any]) -> dict[str, Any]:
     if len(elements) == 2:
         by_comp: dict[tuple[float, ...], dict[str, Any]] = {}
         for p in points:
-            comp_obj = p.get("composition")
+            p_comp = p.get("composition")
             fe = p.get("formation_energy_per_atom")
-            if not isinstance(comp_obj, dict) or not isinstance(fe, int | float):
+            if not isinstance(p_comp, dict) or not isinstance(fe, int | float):
                 continue
-            comp: dict[str, float] = comp_obj
-            key = tuple(round(comp.get(el, 0.0), 6) for el in elements)
+            key = tuple(round(p_comp.get(el, 0.0), 6) for el in elements)
             cur = by_comp.get(key)
             if cur is None or fe < cur["formation_energy_per_atom"]:
                 by_comp[key] = p

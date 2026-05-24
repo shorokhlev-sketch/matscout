@@ -130,21 +130,28 @@ def get_phase_diagram(
 
     # A phase diagram without its elemental endpoints is geometrically
     # degenerate — there's nothing for the convex hull to anchor on.
-    # MP rarely surfaces them in a multi-element chemsys query, so we
-    # fetch the stable elemental phase for each element explicitly and
-    # merge it in. Cheap (one tiny query per element, cached).
+    # MP rarely surfaces them in a multi-element chemsys query (a search
+    # over chemsys="Li-O" filters to compounds, not pure Li or pure O),
+    # so we fetch the stable elemental references explicitly using
+    # ``elements=[X], nelements=1`` — the MP-idiomatic way to ask for
+    # the pure-element entries — and keep just the lowest-EAH one per
+    # element. Cheap (one MP call per element, both cached).
     elements_in_chemsys = canon.split("-")
     if len(elements_in_chemsys) >= 2:
         seen_mp_ids = {str(getattr(d, "material_id", "")) for d in docs}
         for el in elements_in_chemsys:
+            # `num_elements` is the post-2024 MP parameter; `nelements` is the
+            # deprecated alias that MPRester silently ignores (just emits a
+            # warning and returns the unfiltered set). Use the new name.
             el_docs = list(
                 client.materials.summary.search(
-                    chemsys=el,
-                    energy_above_hull=(0.0, 1e-6),  # stable element references only
+                    chemsys=el,  # single-element chemsys == pure-element entries
                     fields=_PHASE_FIELDS,
                 )
             )
-            for ed in el_docs:
+            # Pick the on-hull (or closest-to-hull) elemental entry.
+            el_docs.sort(key=lambda d: (getattr(d, "energy_above_hull", None) or 1e9,))
+            for ed in el_docs[:1]:
                 mid = str(getattr(ed, "material_id", ""))
                 if mid and mid not in seen_mp_ids:
                     docs.append(ed)
