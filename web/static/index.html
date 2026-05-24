@@ -15,7 +15,11 @@
 
 <header class="top">
   <span class="brand">matscout</span>
-  <span class="tag">MCP server + OpenAI agent over Materials Project</span>
+  <span class="tag" data-i18n="header.tag">MCP server + OpenAI agent over Materials Project</span>
+  <span class="locale-switch" role="group" aria-label="Language">
+    <button class="loc-btn" data-locale="en" aria-pressed="true">EN</button>
+    <button class="loc-btn" data-locale="ru" aria-pressed="false">RU</button>
+  </span>
   <span class="meta">
     <a href="https://next-gen.materialsproject.org/" target="_blank" rel="noopener">MP</a>
     <span> · </span>
@@ -25,53 +29,176 @@
 
 <main>
   <section class="col left">
-    <h1>Ask a materials question</h1>
-    <p class="intro">
+    <h1 data-i18n="left.title">Ask a materials question</h1>
+    <p class="intro" data-i18n="left.intro">
       Type a natural-language description of a material you need.
       The agent will translate it to property filters, query the database,
       self-correct if it gets zero or too many hits, and synthesize a
       ranked shortlist with trade-offs.
     </p>
 
-    <label class="q-label" for="q">Your query</label>
-    <textarea id="q" placeholder="Find a stable semiconductor with band gap near 1.5 eV for a solar cell. Give me three candidates with their formula, band gap, and density."></textarea>
+    <label class="q-label" for="q" data-i18n="left.queryLabel">Your query</label>
+    <textarea id="q"></textarea>
 
     <div class="btn-row">
-      <button id="run" class="primary">Ask matscout →</button>
-      <button id="reset" class="ghost" type="button">Clear</button>
+      <button id="run" class="primary" data-i18n="left.askBtn">Ask matscout →</button>
+      <button id="reset" class="ghost" type="button" data-i18n="left.clearBtn">Clear</button>
     </div>
 
     <div class="examples">
-      <h2>Examples</h2>
-      <ul id="examples">
-        <li>Find a stable semiconductor with band gap near 1.5 eV for a solar cell. Three candidates with formula, band gap and density.</li>
-        <li>Thermoelectric with low density (under 5 g/cm³) — three candidates and compare them. Explain the trade-offs.</li>
-        <li>Suggest sodium-based electrode candidates and sort them by stability. Top five only.</li>
-        <li>Is mp-149 stable? Give a one-sentence verdict.</li>
-        <li>Compare Si (mp-149) and diamond (mp-66) on band gap, density and stability.</li>
-      </ul>
+      <h2 data-i18n="left.examplesHeader">Examples</h2>
+      <ul id="examples"></ul>
     </div>
   </section>
 
   <section class="col right">
     <h2>
-      Agent trace
+      <span data-i18n="right.traceHeader">Agent trace</span>
       <span id="elapsed" class="elapsed mono"></span>
     </h2>
     <div id="trace"></div>
     <div id="status" class="status"></div>
 
-    <h2>Answer</h2>
+    <h2 data-i18n="right.answerHeader">Answer</h2>
     <div id="answer"></div>
   </section>
 </main>
 
-<footer>
+<footer data-i18n-html="footer.html">
   Data: <a href="https://next-gen.materialsproject.org/" target="_blank" rel="noopener">Materials Project</a> · CC-BY 4.0.
-  Agent: OpenAI gpt-4o. UI: vanilla JS, FastAPI, SSE.
+  Agent: OpenAI gpt-4o. UI: vanilla JS, FastAPI, polling.
 </footer>
 
 <script>
+// ── i18n dictionary ─────────────────────────────────────────────────────────
+const I18N = {
+  en: {
+    'header.tag': 'MCP server + OpenAI agent over Materials Project',
+    'left.title': 'Ask a materials question',
+    'left.intro': "Type a natural-language description of a material you need. The agent will translate it to property filters, query the database, self-correct if it gets zero or too many hits, and synthesize a ranked shortlist with trade-offs.",
+    'left.queryLabel': 'Your query',
+    'left.askBtn': 'Ask matscout →',
+    'left.clearBtn': 'Clear',
+    'left.examplesHeader': 'Examples',
+    'left.placeholder': 'Find a stable semiconductor with band gap near 1.5 eV for a solar cell. Give me three candidates with their formula, band gap, and density.',
+    'right.traceHeader': 'Agent trace',
+    'right.answerHeader': 'Answer',
+    'answer.empty': 'Answer will appear here.',
+    'status.starting': 'Starting agent…',
+    'status.polling': 'Polling for events…',
+    'status.thinking': (turn) => `Turn ${turn || '?'} · gpt-4o thinking`,
+    'status.calling': (name) => `Calling ${name}…`,
+    'status.toolReturned': 'Tool returned, gpt-4o reading result…',
+    'status.toolError': 'Tool error, recovering…',
+    'status.done': (n, el) => `Done · ${n} tool call(s) · ${el}`,
+    'status.hiccup': (cur, max) => `Network hiccup (${cur}/${max})…`,
+    'status.error': 'Connection error · try again',
+    'event.thinkingPlan': 'Planning next step…',
+    'event.thinkingRead': 'Reading tool results, deciding next move…',
+    'examples': [
+      'Find a stable semiconductor with band gap near 1.5 eV for a solar cell. Three candidates with formula, band gap and density.',
+      'Thermoelectric with low density (under 5 g/cm³) — three candidates and compare them. Explain the trade-offs.',
+      'Suggest sodium-based electrode candidates and sort them by stability. Top five only.',
+      'Is mp-149 stable? Give a one-sentence verdict.',
+      'Compare Si (mp-149) and diamond (mp-66) on band gap, density and stability.',
+    ],
+    'footer.html': 'Data: <a href="https://next-gen.materialsproject.org/" target="_blank" rel="noopener">Materials Project</a> · CC-BY 4.0. Agent: OpenAI gpt-4o. UI: vanilla JS, FastAPI, polling.',
+    'connDrop': 'Repeated network errors while polling. The agent run keeps going on the server — wait a few seconds and press <b>Ask matscout</b> again; the SQLite cache will skip already-completed tool calls.',
+    'startFail': 'Failed to start run',
+  },
+  ru: {
+    'header.tag': 'MCP-сервер + OpenAI-агент над Materials Project',
+    'left.title': 'Задайте вопрос о материалах',
+    'left.intro': 'Опишите словами материал, который вам нужен. Агент переведёт описание в фильтры свойств, запросит базу, при 0 или слишком многих кандидатах сам подстроит ограничения и вернёт ранжированный шорт-лист с разбором компромиссов.',
+    'left.queryLabel': 'Ваш запрос',
+    'left.askBtn': 'Спросить matscout →',
+    'left.clearBtn': 'Очистить',
+    'left.examplesHeader': 'Примеры',
+    'left.placeholder': 'Найди стабильный полупроводник с band gap около 1.5 эВ под солнечную ячейку. Три кандидата с формулой, band gap и плотностью.',
+    'right.traceHeader': 'Трейс агента',
+    'right.answerHeader': 'Ответ',
+    'answer.empty': 'Здесь появится ответ.',
+    'status.starting': 'Запуск агента…',
+    'status.polling': 'Опрос событий…',
+    'status.thinking': (turn) => `Шаг ${turn || '?'} · gpt-4o думает`,
+    'status.calling': (name) => `Вызываю ${name}…`,
+    'status.toolReturned': 'Тул вернулся, gpt-4o читает результат…',
+    'status.toolError': 'Ошибка тула, восстанавливаюсь…',
+    'status.done': (n, el) => `Готово · ${n} tool-call(s) · ${el}`,
+    'status.hiccup': (cur, max) => `Сетевой сбой (${cur}/${max})…`,
+    'status.error': 'Ошибка соединения · попробуйте ещё раз',
+    'event.thinkingPlan': 'Планирую следующий шаг…',
+    'event.thinkingRead': 'Читаю результат тула, выбираю что дальше…',
+    'examples': [
+      'Найди стабильный полупроводник с band gap около 1.5 эВ под солнечную ячейку. Три кандидата с формулой, band gap и плотностью.',
+      'Термоэлектрик с низкой плотностью (меньше 5 г/см³) — три кандидата, сравни их. Объясни компромиссы.',
+      'Предложи натрий-содержащие электродные материалы и отсортируй по стабильности. Только топ-5.',
+      'mp-149 стабилен? Дай вердикт одним предложением.',
+      'Сравни Si (mp-149) и алмаз (mp-66) по band gap, плотности и стабильности.',
+    ],
+    'footer.html': 'Данные: <a href="https://next-gen.materialsproject.org/" target="_blank" rel="noopener">Materials Project</a> · CC-BY 4.0. Агент: OpenAI gpt-4o. UI: vanilla JS, FastAPI, polling.',
+    'connDrop': 'Повторяющиеся сетевые ошибки при опросе. Агент продолжает работать на сервере — подождите пару секунд и нажмите <b>Спросить matscout</b> снова; SQLite-кэш пропустит уже выполненные tool-call-ы.',
+    'startFail': 'Не удалось запустить задачу',
+  },
+};
+
+const SUPPORTED_LOCALES = ['en', 'ru'];
+let LOCALE = (() => {
+  const saved = localStorage.getItem('matscout.locale');
+  if (saved && SUPPORTED_LOCALES.includes(saved)) return saved;
+  return (navigator.language || 'en').startsWith('ru') ? 'ru' : 'en';
+})();
+
+function t(key, ...args) {
+  const v = I18N[LOCALE]?.[key];
+  if (typeof v === 'function') return v(...args);
+  if (v != null) return v;
+  return I18N.en[key] ?? key;
+}
+
+function applyI18n() {
+  document.documentElement.lang = LOCALE;
+  for (const el of document.querySelectorAll('[data-i18n]')) {
+    el.textContent = t(el.dataset.i18n);
+  }
+  for (const el of document.querySelectorAll('[data-i18n-html]')) {
+    el.innerHTML = t(el.dataset.i18nHtml);
+  }
+  const q = document.querySelector('#q');
+  if (q) q.placeholder = t('left.placeholder');
+  // Examples list
+  const ul = document.querySelector('#examples');
+  if (ul) {
+    ul.innerHTML = '';
+    for (const ex of t('examples')) {
+      const li = document.createElement('li');
+      li.textContent = ex;
+      li.addEventListener('click', () => {
+        document.querySelector('#q').value = ex;
+        document.querySelector('#q').focus();
+      });
+      ul.appendChild(li);
+    }
+  }
+  // Locale-switch pressed-state
+  for (const btn of document.querySelectorAll('.loc-btn')) {
+    const on = btn.dataset.locale === LOCALE;
+    btn.setAttribute('aria-pressed', String(on));
+    btn.classList.toggle('on', on);
+  }
+  // Empty-answer placeholder (CSS picks this up via [data-empty-msg])
+  const ans = document.querySelector('#answer');
+  if (ans) ans.dataset.emptyMsg = t('answer.empty');
+}
+
+for (const btn of document.querySelectorAll('.loc-btn')) {
+  btn.addEventListener('click', () => {
+    LOCALE = btn.dataset.locale;
+    localStorage.setItem('matscout.locale', LOCALE);
+    applyI18n();
+  });
+}
+
 const $ = (sel) => document.querySelector(sel);
 const trace = $('#trace');
 const answerEl = $('#answer');
@@ -138,7 +265,7 @@ async function ask(query) {
   trace.innerHTML = '';
   answerEl.innerHTML = '';
   pendingEvent = null;
-  setStatus('Starting agent…', 'live');
+  setStatus(t('status.starting'), 'live');
   startTimer();
   runBtn.disabled = true;
 
@@ -147,7 +274,7 @@ async function ask(query) {
     const resp = await fetch('/api/query', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query }),
+      body: JSON.stringify({ query, locale: LOCALE }),
     });
     if (!resp.ok) {
       const detail = await resp.text();
@@ -155,10 +282,10 @@ async function ask(query) {
     }
     const data = await resp.json();
     requestId = data.request_id;
-    setStatus(`Polling /api/query/${requestId.slice(0, 6)}…`, 'live');
+    setStatus(t('status.polling'), 'live');
   } catch (e) {
-    addEvent('tool_error', `Failed to start run: ${e.message}`);
-    setStatus('Error', '');
+    addEvent('tool_error', `${t('startFail')}: ${e.message}`);
+    setStatus(t('status.error'), '');
     runBtn.disabled = false;
     stopTimer();
     return;
@@ -178,15 +305,12 @@ async function ask(query) {
       networkErrors = 0;
     } catch (e) {
       networkErrors += 1;
-      setStatus(`Network hiccup (${networkErrors}/${POLL_MAX_NETWORK_RETRIES})…`, 'live');
+      setStatus(t('status.hiccup', networkErrors, POLL_MAX_NETWORK_RETRIES), 'live');
       if (networkErrors >= POLL_MAX_NETWORK_RETRIES) {
         addEvent('tool_error',
-          `Repeated network errors while polling. The agent run keeps going on ` +
-          `the server — wait a few seconds and press <b>Ask matscout</b> again; ` +
-          `the SQLite cache will skip already-completed tool calls. ` +
-          `<span class="detail">(${e.message})</span>`
+          `${t('connDrop')} <span class="detail">(${e.message})</span>`
         );
-        setStatus('Connection error · try again', '');
+        setStatus(t('status.error'), '');
         break;
       }
       await sleep(POLL_NETWORK_RETRY_MS);
@@ -218,10 +342,15 @@ function escAttr(s) {
   return String(s).replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
 }
 
+function localizeThinkingContent(raw) {
+  // Server emits English strings; translate the two canonical ones for RU.
+  if (LOCALE !== 'ru' || !raw) return raw;
+  if (raw.startsWith('Planning')) return t('event.thinkingPlan');
+  if (raw.startsWith('Reading')) return t('event.thinkingRead');
+  return raw;
+}
+
 function handleEvent(kind, p) {
-  // Close out previous in-flight event (its timing ends when the next
-  // event arrives — model thinking duration is the gap before tool_call,
-  // tool execution duration is the gap before tool_result, etc.).
   if (pendingEvent) {
     const dur = performance.now() - Number(pendingEvent.dataset.startedAt);
     finalizeEvent(pendingEvent, dur);
@@ -229,22 +358,29 @@ function handleEvent(kind, p) {
   }
 
   if (p.kind === 'thinking') {
-    pendingEvent = addEvent('thinking', `<span class="name">turn ${p.turn || '?'}</span> <span class="detail">${p.content || 'Thinking…'}</span>`, { live: true });
-    setStatus(`Turn ${p.turn || '?'} · gpt-4o thinking`, 'live');
+    const content = localizeThinkingContent(p.content || 'Thinking…');
+    pendingEvent = addEvent('thinking',
+      `<span class="name">turn ${p.turn || '?'}</span> <span class="detail">${escAttr(content)}</span>`,
+      { live: true });
+    setStatus(t('status.thinking', p.turn), 'live');
   } else if (p.kind === 'tool_call') {
-    pendingEvent = addEvent('tool_call', `<span class="name">${p.name}</span><span class="detail">${fmtArgs(p.args)}</span>`, { live: true });
-    setStatus(`Calling ${p.name}…`, 'live');
+    pendingEvent = addEvent('tool_call',
+      `<span class="name">${p.name}</span><span class="detail">${fmtArgs(p.args)}</span>`,
+      { live: true });
+    setStatus(t('status.calling', p.name), 'live');
   } else if (p.kind === 'tool_result') {
-    addEvent('tool_result', `<span class="name">${p.name || ''}</span><span class="detail">→ ${escAttr(p.result_summary || 'ok')}</span>`);
-    setStatus('Tool returned, gpt-4o reading result…', 'live');
+    addEvent('tool_result',
+      `<span class="name">${p.name || ''}</span><span class="detail">→ ${escAttr(p.result_summary || 'ok')}</span>`);
+    setStatus(t('status.toolReturned'), 'live');
   } else if (p.kind === 'tool_error') {
-    addEvent('tool_error', `<span class="name">${p.name || ''}</span><span class="detail">⨯ ${escAttr(p.error)}</span>`);
-    setStatus('Tool error, recovering…', 'live');
+    addEvent('tool_error',
+      `<span class="name">${p.name || ''}</span><span class="detail">⨯ ${escAttr(p.error)}</span>`);
+    setStatus(t('status.toolError'), 'live');
   } else if (p.kind === 'final') {
     answerEl.innerHTML = marked.parse(p.content || '');
     const ncalls = trace.querySelectorAll('.ev.tool_call').length;
     const elapsed = fmtElapsed(performance.now() - queryStart);
-    setStatus(`Done · ${ncalls} tool call(s) · ${elapsed}`, 'done');
+    setStatus(t('status.done', ncalls, elapsed), 'done');
     stopTimer();
   }
 }
@@ -261,13 +397,6 @@ $('#reset').addEventListener('click', () => {
   setStatus('');
 });
 
-document.querySelectorAll('#examples li').forEach((li) => {
-  li.addEventListener('click', () => {
-    $('#q').value = li.textContent.trim();
-    $('#q').focus();
-  });
-});
-
 // Submit on Cmd/Ctrl + Enter
 $('#q').addEventListener('keydown', (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
@@ -275,6 +404,9 @@ $('#q').addEventListener('keydown', (e) => {
     runBtn.click();
   }
 });
+
+// First paint
+applyI18n();
 </script>
 </body>
 </html>

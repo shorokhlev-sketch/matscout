@@ -53,6 +53,7 @@ Status = Literal["running", "done", "error"]
 class Run:
     request_id: str
     query: str
+    locale: str = "en"
     events: list[dict[str, Any]] = field(default_factory=list)
     status: Status = "running"
     error: str | None = None
@@ -108,7 +109,22 @@ def _event_payload(ev: TraceEvent) -> dict[str, Any]:
 async def _drive_run(run: Run) -> None:
     """Background coroutine — runs the agent and pumps events into ``run.events``."""
     loop = asyncio.get_running_loop()
-    gen = stream_agent(run.query)
+    # Steer the LLM's natural-language output without touching the tool layer.
+    # The system prompt stays English (tool docs / matsci jargon don't benefit
+    # from translation); we just bolt on a "respond in <lang>" directive.
+    locale_hint = ""  # noqa: RUF001 — Russian text intentionally embedded
+    if run.locale == "ru":
+        # ruff RUF001 flags Cyrillic chars as look-alikes of Latin; we want
+        # actual Cyrillic here — silence the rule for this single block.
+        locale_hint = (  # noqa: RUF001
+            "\n\nВажно: финальный ответ пользователю — на русском языке. "  # noqa: RUF001
+            "Технические термины и имена материалов оставляй как есть "  # noqa: RUF001
+            "(band gap, mp-149, Fd-3m, eV/atom). "  # noqa: RUF001
+            "Внутренние tool calls и рассуждения — на английском."  # noqa: RUF001
+        )
+    from matscout.agent.prompts import SYSTEM_PROMPT_V1
+
+    gen = stream_agent(run.query, system_prompt=SYSTEM_PROMPT_V1 + locale_hint)
     try:
         while True:
             ev = await loop.run_in_executor(None, next, gen, None)
@@ -145,6 +161,7 @@ async def _gc_old_runs() -> None:
 
 class QueryRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=2000)
+    locale: Literal["en", "ru"] = "en"
 
 
 class QueryAccepted(BaseModel):
@@ -170,7 +187,7 @@ async def start_query(req: QueryRequest) -> QueryAccepted:
                 detail=f"Too many concurrent runs ({in_flight}/{MAX_CONCURRENT_RUNS}). Retry shortly.",
             )
         rid = uuid.uuid4().hex[:12]
-        run = Run(request_id=rid, query=req.query)
+        run = Run(request_id=rid, query=req.query, locale=req.locale)
         _runs[rid] = run
     asyncio.create_task(_drive_run(run))
     return QueryAccepted(request_id=rid)

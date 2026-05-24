@@ -66,7 +66,7 @@ header.top .tag {
   letter-spacing: 0.18em;
 }
 header.top .meta {
-  margin-left: auto;
+  margin-left: 14px;
   font-family: var(--mono);
   font-size: 10.5px;
   color: var(--fg-3);
@@ -75,6 +75,33 @@ header.top .meta a {
   color: var(--fg-2);
   text-decoration: none;
   border-bottom: 1px dashed var(--border-hi);
+}
+
+/* Locale switch — sits between the tag and the meta block, auto-pushed left */
+.locale-switch {
+  margin-left: auto;
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--rad);
+  overflow: hidden;
+  font-family: var(--mono);
+}
+.locale-switch .loc-btn {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  padding: 4px 9px;
+  border: none;
+  background: transparent;
+  color: var(--fg-3);
+  cursor: pointer;
+  text-transform: none;
+}
+.locale-switch .loc-btn + .loc-btn { border-left: 1px solid var(--border); }
+.locale-switch .loc-btn:hover { color: var(--fg-2); }
+.locale-switch .loc-btn.on {
+  background: var(--acc);
+  color: #14140d;
 }
 
 main {
@@ -285,7 +312,7 @@ button.ghost { background: transparent; color: var(--fg-3); }
   min-height: 80px;
 }
 #answer:empty::before {
-  content: 'Answer will appear here.';
+  content: attr(data-empty-msg);
   color: var(--fg-4);
   font-style: italic;
   font-size: 12.5px;
