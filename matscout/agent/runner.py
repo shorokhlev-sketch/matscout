@@ -40,12 +40,13 @@ MAX_TURNS = 10  # hard cap on tool-call rounds to bound cost + latency
 class TraceEvent:
     """One step of the agent's reasoning, as it happened."""
 
-    kind: str  # 'tool_call' | 'tool_result' | 'tool_error' | 'message' | 'final'
+    kind: str  # 'thinking' | 'tool_call' | 'tool_result' | 'tool_error' | 'final'
     name: str | None = None
     args: dict[str, Any] | None = None
     result: Any = None
     error: str | None = None
     content: str | None = None
+    turn: int | None = None
 
 
 @dataclass
@@ -121,6 +122,16 @@ def stream_agent(
 
     for turn in range(max_turns):
         log.debug("turn %d → openai", turn)
+        # Tell the UI we're waiting on gpt-4o now — this is the longest
+        # silent stretch in any agent loop (5-20s per turn), so calling
+        # it out explicitly stops users from thinking the page froze.
+        yield TraceEvent(
+            kind="thinking",
+            turn=turn + 1,
+            content=(
+                "Planning next step…" if turn == 0 else "Reading tool results, deciding next move…"
+            ),
+        )
         response = client.chat.completions.create(
             model=model,
             messages=messages,  # type: ignore[arg-type]

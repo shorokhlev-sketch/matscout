@@ -54,7 +54,10 @@
   </section>
 
   <section class="col right">
-    <h2>Agent trace</h2>
+    <h2>
+      Agent trace
+      <span id="elapsed" class="elapsed mono"></span>
+    </h2>
     <div id="trace"></div>
     <div id="status" class="status"></div>
 
@@ -75,13 +78,37 @@ const answerEl = $('#answer');
 const statusEl = $('#status');
 const runBtn = $('#run');
 
-function addEvent(kind, body) {
+let queryStart = 0;
+let timerHandle = null;
+let pendingEvent = null;  // the in-flight event row whose timer is still running
+
+function fmtElapsed(ms) {
+  const s = Math.floor(ms / 1000);
+  return s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`;
+}
+
+function addEvent(kind, body, opts = {}) {
   const row = document.createElement('div');
-  row.className = `ev ${kind}`;
-  row.innerHTML = `<span class="badge">${kind.replace('_', ' ')}</span><span class="body"></span>`;
-  row.querySelector('.body').innerHTML = body;
+  row.className = `ev ${kind}` + (opts.live ? ' live' : '');
+  const t0 = performance.now();
+  row.dataset.startedAt = String(t0);
+  row.innerHTML =
+    `<span class="badge">${kind.replace('_', ' ')}</span>` +
+    `<span class="body">${body}</span>` +
+    `<span class="ts mono">+${fmtElapsed(t0 - queryStart)}</span>`;
   trace.appendChild(row);
   row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  return row;
+}
+
+function finalizeEvent(row, durationMs) {
+  if (!row) return;
+  row.classList.remove('live');
+  const ts = row.querySelector('.ts');
+  if (ts && durationMs != null) {
+    ts.textContent = `${(durationMs / 1000).toFixed(1)}s`;
+    ts.classList.add('done');
+  }
 }
 
 function setStatus(text, cls) {
@@ -89,10 +116,26 @@ function setStatus(text, cls) {
   statusEl.className = `status ${cls || ''}`;
 }
 
+function startTimer() {
+  const elapsedEl = $('#elapsed');
+  queryStart = performance.now();
+  timerHandle = setInterval(() => {
+    elapsedEl.textContent = fmtElapsed(performance.now() - queryStart);
+  }, 200);
+  elapsedEl.classList.add('live');
+}
+function stopTimer() {
+  if (timerHandle) clearInterval(timerHandle);
+  timerHandle = null;
+  $('#elapsed').classList.remove('live');
+}
+
 async function ask(query) {
   trace.innerHTML = '';
   answerEl.innerHTML = '';
-  setStatus('Connecting…', 'live');
+  pendingEvent = null;
+  setStatus('Opening connection to /api/query…', 'live');
+  startTimer();
   runBtn.disabled = true;
 
   let buffer = '';
@@ -106,11 +149,13 @@ async function ask(query) {
     });
     if (!resp.ok || !resp.body) {
       const text = await resp.text();
-      addEvent('tool_error', `<span class="detail">HTTP ${resp.status}: ${text}</span>`);
+      addEvent('tool_error', `HTTP ${resp.status}: ${text}`);
       setStatus('Error', '');
+      stopTimer();
+      runBtn.disabled = false;
       return;
     }
-    setStatus('Thinking…', 'live');
+    setStatus('Connected, streaming…', 'live');
 
     const reader = resp.body.getReader();
     const decoder = new TextDecoder();
@@ -136,32 +181,52 @@ async function ask(query) {
       }
     }
   } catch (e) {
-    addEvent('tool_error', `<span class="detail">${e.message}</span>`);
+    addEvent('tool_error', e.message);
     setStatus('Error', '');
   } finally {
     runBtn.disabled = false;
+    stopTimer();
   }
 }
 
+function fmtArgs(args) {
+  if (!args || !Object.keys(args).length) return '';
+  return Object.entries(args)
+    .map(([k, v]) => `<span class="kv"><span class="k">${k}</span>=<span class="v">${escAttr(JSON.stringify(v))}</span></span>`)
+    .join(', ');
+}
+function escAttr(s) {
+  return String(s).replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+}
+
 function handleEvent(kind, p) {
-  if (p.kind === 'tool_call') {
-    const argSummary = p.args ? Object.entries(p.args)
-      .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
-      .join(', ') : '';
-    addEvent('tool_call', `<span class="name">${p.name}</span><span class="detail">(${argSummary})</span>`);
+  // Close out previous in-flight event (its timing ends when the next
+  // event arrives — model thinking duration is the gap before tool_call,
+  // tool execution duration is the gap before tool_result, etc.).
+  if (pendingEvent) {
+    const dur = performance.now() - Number(pendingEvent.dataset.startedAt);
+    finalizeEvent(pendingEvent, dur);
+    pendingEvent = null;
+  }
+
+  if (p.kind === 'thinking') {
+    pendingEvent = addEvent('thinking', `<span class="name">turn ${p.turn || '?'}</span> <span class="detail">${p.content || 'Thinking…'}</span>`, { live: true });
+    setStatus(`Turn ${p.turn || '?'} · gpt-4o thinking`, 'live');
+  } else if (p.kind === 'tool_call') {
+    pendingEvent = addEvent('tool_call', `<span class="name">${p.name}</span><span class="detail">${fmtArgs(p.args)}</span>`, { live: true });
+    setStatus(`Calling ${p.name}…`, 'live');
   } else if (p.kind === 'tool_result') {
-    addEvent('tool_result', `<span class="name">${p.name || ''}</span><span class="detail">→ ${p.result_summary || 'ok'}</span>`);
+    addEvent('tool_result', `<span class="name">${p.name || ''}</span><span class="detail">→ ${escAttr(p.result_summary || 'ok')}</span>`);
+    setStatus('Tool returned, gpt-4o reading result…', 'live');
   } else if (p.kind === 'tool_error') {
-    addEvent('tool_error', `<span class="name">${p.name || ''}</span><span class="detail">⨯ ${p.error}</span>`);
+    addEvent('tool_error', `<span class="name">${p.name || ''}</span><span class="detail">⨯ ${escAttr(p.error)}</span>`);
+    setStatus('Tool error, recovering…', 'live');
   } else if (p.kind === 'final') {
     answerEl.innerHTML = marked.parse(p.content || '');
-    setStatus(`Done · ${trace.querySelectorAll('.ev.tool_call').length} tool call(s)`, 'done');
-    return;
-  }
-  // After a tool_result, the model is thinking — show that explicitly so
-  // the user understands the gap before the next tool_call or final.
-  if (p.kind === 'tool_result' || p.kind === 'tool_error') {
-    setStatus('Model thinking…', 'live');
+    const ncalls = trace.querySelectorAll('.ev.tool_call').length;
+    const elapsed = fmtElapsed(performance.now() - queryStart);
+    setStatus(`Done · ${ncalls} tool call(s) · ${elapsed}`, 'done');
+    stopTimer();
   }
 }
 

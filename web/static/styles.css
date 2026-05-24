@@ -209,10 +209,11 @@ button.ghost { background: transparent; color: var(--fg-3); }
   font-size: 11.5px;
 }
 .ev {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
   align-items: baseline;
-  gap: 8px;
-  padding: 6px 9px;
+  gap: 10px;
+  padding: 6px 10px;
   border-left: 2px solid var(--border);
   background: transparent;
 }
@@ -225,14 +226,51 @@ button.ghost { background: transparent; color: var(--fg-3); }
   border-radius: 2px;
   flex-shrink: 0;
 }
-.ev.tool_call    { border-left-color: var(--acc); }
-.ev.tool_call .badge    { background: var(--acc-soft); color: var(--acc); }
-.ev.tool_result  { border-left-color: var(--ok); }
-.ev.tool_result .badge  { color: var(--ok); }
-.ev.tool_error   { border-left-color: var(--err); }
-.ev.tool_error .badge   { color: var(--err); }
+.ev .body { min-width: 0; overflow: hidden; }
+.ev .body .detail { color: var(--fg-3); word-break: break-word; }
+.ev .ts {
+  font-size: 10px;
+  color: var(--fg-4);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.ev .ts.done { color: var(--fg-3); }
+.ev.thinking      { border-left-color: var(--fg-3); }
+.ev.thinking .badge   { color: var(--fg-2); border: 1px solid var(--border); }
+.ev.tool_call     { border-left-color: var(--acc); }
+.ev.tool_call .badge  { background: var(--acc-soft); color: var(--acc); }
+.ev.tool_result   { border-left-color: var(--ok); }
+.ev.tool_result .badge { color: var(--ok); }
+.ev.tool_error    { border-left-color: var(--err); }
+.ev.tool_error .badge  { color: var(--err); }
 .ev .name { color: var(--fg); font-weight: 600; }
-.ev .detail { color: var(--fg-3); white-space: pre-wrap; word-break: break-word; }
+.ev .kv { color: var(--fg-3); margin-right: 6px; }
+.ev .kv .k { color: var(--fg-2); }
+.ev .kv .v { color: var(--fg); }
+
+/* Live event — animated bar on the left edge + ticking timestamp */
+.ev.live {
+  background: linear-gradient(90deg, var(--acc-soft) 0%, transparent 60%);
+}
+.ev.live .ts::after {
+  content: ' ⟳';
+  display: inline-block;
+  animation: spin 1.4s linear infinite;
+  color: var(--acc);
+}
+@keyframes spin {
+  from { transform: rotate(0); } to { transform: rotate(360deg); }
+}
+
+/* Top-right elapsed timer next to the section title */
+.elapsed {
+  font-size: 10.5px;
+  color: var(--fg-3);
+  margin-left: 10px;
+  letter-spacing: 0.04em;
+}
+.elapsed.live { color: var(--acc); }
+.elapsed.live::before { content: '● '; }
 
 #answer {
   margin-top: 14px;

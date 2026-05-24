@@ -49,18 +49,33 @@ def _event_payload(ev: TraceEvent) -> dict[str, Any]:
         payload["error"] = ev.error
     if ev.content is not None:
         payload["content"] = ev.content
+    if ev.turn is not None:
+        payload["turn"] = ev.turn
     if ev.result is not None:
         # Keep the payload compact — full result already drives the
         # final answer; here we just show a short preview/length.
         if isinstance(ev.result, list):
-            payload["result_summary"] = f"{len(ev.result)} item(s)"
+            preview: list[str] = []
+            for item in ev.result[:3]:
+                if isinstance(item, dict):
+                    mid = item.get("material_id", "?")
+                    formula = item.get("formula_pretty", "")
+                    preview.append(f"{mid} {formula}".strip())
+            payload["result_summary"] = f"{len(ev.result)} item(s)" + (
+                f" → {', '.join(preview)}" + ("…" if len(ev.result) > 3 else "") if preview else ""
+            )
         elif isinstance(ev.result, dict):
             mid = ev.result.get("material_id")
+            formula = ev.result.get("formula_pretty")
             verdict = ev.result.get("verdict")
+            parts: list[str] = []
             if mid:
-                payload["result_summary"] = f"{mid}" + (f" · {verdict}" if verdict else "")
-            else:
-                payload["result_summary"] = "(object)"
+                parts.append(mid)
+            if formula:
+                parts.append(formula)
+            if verdict:
+                parts.append(verdict)
+            payload["result_summary"] = " · ".join(parts) if parts else "(object)"
         else:
             payload["result_summary"] = str(ev.result)[:120]
     return payload

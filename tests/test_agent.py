@@ -189,7 +189,12 @@ def test_agent_direct_answer_no_tools() -> None:
 
 
 def test_agent_invokes_tool_then_returns() -> None:
-    """Two-step loop: model asks for a tool, then synthesizes an answer."""
+    """Two-step loop: model asks for a tool, then synthesizes an answer.
+
+    Each call to gpt-4o is preceded by a 'thinking' trace event so the UI
+    can render 'waiting on model' state — that's why we see two of them
+    in a single-tool roundtrip.
+    """
     tc = _mk_tool_call("c1", "get_material", {"material_id": "mp-149"})
     client = _client_that_answers(
         _FakeMessage(content=None, tool_calls=[tc]),
@@ -199,10 +204,13 @@ def test_agent_invokes_tool_then_returns() -> None:
     assert result.answer == "Si has gap 0.61 eV."
     assert result.turns == 1
     kinds = [ev.kind for ev in result.trace]
-    assert kinds == ["tool_call", "tool_result", "final"]
+    assert kinds == ["thinking", "tool_call", "tool_result", "thinking", "final"]
     call_ev = next(ev for ev in result.trace if ev.kind == "tool_call")
     assert call_ev.name == "get_material"
     assert call_ev.args == {"material_id": "mp-149"}
+    # 'thinking' events carry turn numbers (1-indexed)
+    thinking_events = [ev for ev in result.trace if ev.kind == "thinking"]
+    assert [ev.turn for ev in thinking_events] == [1, 2]
 
 
 def test_agent_handles_tool_error_gracefully() -> None:
