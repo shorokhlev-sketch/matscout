@@ -23,11 +23,15 @@ OAI_KEY=$(grep '^OPENAI_API_KEY=' .env | cut -d= -f2-)
 SSH="ssh -i $SSH_KEY"
 
 echo "▸ Step 1/6: rsync code (prod files only) to $REMOTE_DIR"
+# Bake the current commit SHA into a VERSION file so provenance.py can
+# show it without git being available at runtime.
+git rev-parse --short=10 HEAD > VERSION 2>/dev/null || echo "unknown" > VERSION
 $SSH "$VPS_USER@$VPS_IP" "mkdir -p $REMOTE_DIR /var/lib/prfo-matscout"
 rsync -az --delete \
   --include='matscout/' --include='matscout/**' \
   --include='web/' --include='web/**' \
   --include='pyproject.toml' --include='uv.lock' --include='README.md' \
+  --include='VERSION' \
   --exclude='*' \
   -e "ssh -i $SSH_KEY" \
   ./ "$VPS_USER@$VPS_IP:$REMOTE_DIR/"
