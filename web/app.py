@@ -17,6 +17,7 @@ Run:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -114,7 +115,9 @@ def _persist(run: Run, *, include_metadata: bool = False) -> None:
     Provenance metadata is attached at the end of a run (it's stable across
     a single execution; no point computing it on every event).
     """
-    try:
+    # Never let storage failures crash an in-flight agent loop.
+    # The in-memory run object is still the source of truth for polling.
+    with contextlib.suppress(Exception):
         get_store().save(
             request_id=run.request_id,
             query=run.query,
@@ -125,10 +128,6 @@ def _persist(run: Run, *, include_metadata: bool = False) -> None:
             finished_at=run.finished_at,
             metadata=build_metadata() if include_metadata else None,
         )
-    except Exception:
-        # Never let storage failures crash an in-flight agent loop.
-        # The in-memory run object is still the source of truth for polling.
-        pass
 
 
 async def _drive_run(run: Run) -> None:

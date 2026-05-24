@@ -15,7 +15,7 @@ import json
 import re
 import sqlite3
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -52,10 +52,10 @@ class ResearchStore:
         with self._conn() as c:
             c.executescript(_SCHEMA)
             for stmt in _MIGRATIONS:
-                try:
+                # ALTERs are idempotent at the application level — already-
+                # applied migrations raise OperationalError, which is fine.
+                with suppress(sqlite3.OperationalError):
                     c.execute(stmt)
-                except sqlite3.OperationalError:
-                    pass  # already applied
 
     @contextmanager
     def _conn(self) -> Iterator[sqlite3.Connection]:
