@@ -568,19 +568,26 @@ async function toggleCrystalViewer(btn, materialId) {
 }
 
 /**
+/**
  * Render a phase-diagram visualisation as inline SVG.
  * Switches projection based on the number of elements in the chemsys:
  *
- *   1 element  → tiny indicator (rare case, one composition point).
+ *   1 element  → polymorph stability ladder. All entries share the
+ *                same composition (a single elemental composition),
+ *                so the only physical axis is "how far above the
+ *                ground-state polymorph is each entry?" (eV/atom).
+ *                A scatter of formation_E vs eah here is meaningless
+ *                — both quantities are identical up to a constant.
  *   2 elements → proper convex-hull plot: x = mole fraction of element-2,
  *                y = formation energy per atom. Stable points are joined
  *                by the convex hull line; off-hull points float above.
- *   3+ elements → fall back to scatter (formation energy × E above hull),
- *                same as before. Ternary projection is a future K2 polish.
+ *   3+ elements → fall back to scatter (formation energy × E above hull).
+ *                Ternary projection is a future polish.
  */
 function renderPhaseDiagramSVG(viz) {
   if (!viz || !Array.isArray(viz.points) || viz.points.length === 0) return null;
   const els = Array.isArray(viz.elements) ? viz.elements : [];
+  if (els.length === 1) return renderUnaryLadderSVG(viz, els[0]);
   if (els.length === 2) {
     const binary = viz.points.filter(p =>
       p.composition && typeof p.composition[els[1]] === 'number' &&
@@ -589,6 +596,114 @@ function renderPhaseDiagramSVG(viz) {
     if (binary.length >= 2) return renderBinaryHullSVG(viz, els, binary);
   }
   return renderScatterSVG(viz);
+}
+
+/**
+ * Unary "polymorph ladder" — one row per entry, ordered by E above hull,
+ * so the ground-state polymorph anchors the left edge and progressively
+ * less stable ones step right. The amber dot is the on-hull entry; open
+ * dots are metastable. Communicates "how does each polymorph stack up
+ * against the ground state?" — the only meaningful question for a
+ * single-element phase diagram.
+ */
+function renderUnaryLadderSVG(viz, el) {
+  const pts = viz.points
+    .filter(p => typeof p.energy_above_hull === 'number')
+    .slice()
+    .sort((a, b) => (a.energy_above_hull || 0) - (b.energy_above_hull || 0));
+  if (!pts.length) return null;
+
+  const W = 460, H = 60 + 18 * Math.min(pts.length, 14);
+  const M = { top: 28, right: 18, bottom: 36, left: 60 };
+  const innerW = W - M.left - M.right;
+  const innerH = H - M.top - M.bottom;
+
+  const eahs = pts.map(p => p.energy_above_hull);
+  const xMax = Math.max(...eahs, 0.001);
+  const sx = (eah) => M.left + (eah / xMax) * innerW;
+  // Vertical position: index in the sorted list, evenly spaced.
+  const sy = (i) => M.top + (pts.length === 1 ? innerH / 2 : (i / (pts.length - 1)) * innerH);
+
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('class', 'phase-diagram');
+
+  // Axes & guides
+  const line = (x1, y1, x2, y2, opts = {}) => {
+    const ln = document.createElementNS(ns, 'line');
+    ln.setAttribute('x1', x1); ln.setAttribute('y1', y1);
+    ln.setAttribute('x2', x2); ln.setAttribute('y2', y2);
+    ln.setAttribute('stroke', opts.stroke || 'rgba(255,255,255,0.10)');
+    ln.setAttribute('stroke-width', opts.width || '1');
+    if (opts.dash) ln.setAttribute('stroke-dasharray', opts.dash);
+    return ln;
+  };
+  svg.appendChild(line(M.left, M.top + innerH, M.left + innerW, M.top + innerH, { stroke: 'rgba(255,255,255,0.18)' }));
+  // Vertical "ground state" marker at x = 0
+  svg.appendChild(line(M.left, M.top - 4, M.left, M.top + innerH + 4,
+    { stroke: 'var(--acc)', dash: '2 3', width: '1' }));
+
+  // Lollipop sticks from x=0 to each point, then the dot
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i];
+    const y = sy(i);
+    const x = sx(p.energy_above_hull);
+    const isStable = (p.energy_above_hull || 0) < 1e-9;
+
+    const stick = line(M.left, y, x, y, {
+      stroke: isStable ? 'rgba(245,158,11,0.5)' : 'rgba(255,255,255,0.18)',
+      width: '1',
+    });
+    svg.appendChild(stick);
+
+    const c = document.createElementNS(ns, 'circle');
+    c.setAttribute('cx', x);
+    c.setAttribute('cy', y);
+    c.setAttribute('r', isStable ? 5.5 : 3.2);
+    c.setAttribute('class', isStable ? 'pt stable' : 'pt metastable');
+    const tt = document.createElementNS(ns, 'title');
+    tt.textContent =
+      `${p.material_id || ''}  ${p.formula || ''}\n` +
+      `E above hull = ${(p.energy_above_hull * 1000).toFixed(1)} meV/atom` +
+      (isStable ? ' (ground state)' : '');
+    c.appendChild(tt);
+    if (p.material_id) {
+      const a = document.createElementNS(ns, 'a');
+      a.setAttribute('href', `https://next-gen.materialsproject.org/materials/${p.material_id}`);
+      a.setAttribute('target', '_blank'); a.setAttribute('rel', 'noopener');
+      a.appendChild(c);
+      svg.appendChild(a);
+    } else {
+      svg.appendChild(c);
+    }
+
+    // Inline label to the right of each dot (mp-id, truncated if many)
+    if (pts.length <= 14) {
+      const lbl = document.createElementNS(ns, 'text');
+      lbl.setAttribute('x', x + 9);
+      lbl.setAttribute('y', y + 3);
+      lbl.setAttribute('class', 'unary-label');
+      lbl.textContent = p.material_id || p.formula || '';
+      svg.appendChild(lbl);
+    }
+  }
+
+  // Axis labels
+  const txt = (x, y, str, cls) => {
+    const t = document.createElementNS(ns, 'text');
+    t.setAttribute('x', x); t.setAttribute('y', y); t.setAttribute('class', cls);
+    t.textContent = str;
+    return t;
+  };
+  svg.appendChild(txt(M.left + innerW / 2, H - 8, 'E above hull (eV/atom)', 'axis-label'));
+  svg.appendChild(txt(M.left, M.top + innerH + 16, '0', 'tick-label-left'));
+  svg.appendChild(txt(M.left + innerW, M.top + innerH + 16, xMax.toFixed(2), 'tick-label-right'));
+  svg.appendChild(txt(M.left, M.top - 10,
+    `${el} polymorphs  ·  ${pts.length} entries  ·  ground state ${pts[0].material_id || ''}`,
+    'chart-title'));
+
+  return svg;
 }
 
 /** Binary convex-hull plot — what people actually expect from "phase diagram". */

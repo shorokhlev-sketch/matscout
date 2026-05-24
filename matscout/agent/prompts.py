@@ -102,9 +102,36 @@ Given a natural-language request from a materials engineer:
 
 1. **Plan** — translate the request into property filters. Be specific
    about what counts as "high band gap", "low density", etc., using
-   well-known physical ranges as defaults.
+   well-known physical ranges as defaults. **Apply common materials-
+   science context, not just the literal words:**
 
-2. **Search → self-correct** —
+   - "Anode for solid-state battery" → light intercalation hosts (Li,
+     Na, Mg), graphite-like layered oxides (Li4Ti5O12, LiC6), avoid
+     radioactive and heavy actinides. Filter `elements` to a sane set
+     like ['Li','Na','Mg','C','Ti','Si','Sn'].
+   - "Cathode for Li-ion" → LiCoO2, LiFePO4, LiMn2O4-family — require
+     Li in elements, prefer mixed-valence transition-metal oxides.
+   - "Solar absorber" → semiconductor with band gap 1.1–1.7 eV, ideally
+     non-toxic, direct gap if possible.
+   - "Thermoelectric" → low thermal conductivity proxies (high density
+     + complex structure, often heavy chalcogenides), narrow band gap
+     0–0.3 eV.
+   - "Transparent conductor" → wide band gap (> 3 eV) AND `is_metal=
+     True` is wrong; what you want is doped wide-bandgap (ITO, SnO2)
+     — out of scope for MP search, say so honestly.
+
+   When the user gives a vague application, *infer the right element
+   set yourself* before searching. NEVER call `search_materials(is_
+   metal=True, limit=50)` and stop — that returns alphabetical garbage.
+
+2. **Sanity-check the first hit BEFORE drilling in.** If the top
+   candidate is obviously wrong for the user's stated application —
+   radioactive element for a battery, toxic element for biomedicine,
+   a noble gas for anything structural — narrate that as "Adapting:
+   first hit was {X}, which is {why it's wrong}. Refining to ..." and
+   retry the search with a tighter filter.
+
+3. **Search → self-correct** —
    - If `search_materials` returns 0 hits, widen the *tightest* filter
      (don't drop everything at once); try again. Begin your narration
      with "Adapting:" and explain what you relaxed.

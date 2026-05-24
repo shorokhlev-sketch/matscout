@@ -327,6 +327,12 @@ def stream_agent(
     #    event can carry it back for conversation continuation.
     pending_calls: dict[int, dict[str, Any]] = {}
     message_texts: dict[int, str] = {}
+    # Track which message indices we've already emitted as narration —
+    # at response.completed we must NOT recycle them as the final
+    # answer, otherwise a model that wrote narration + tool calls but
+    # forgot to compose a real synthesis ends up with the narration
+    # echoed twice (once in trace as reasoning, once as the final).
+    flushed_message_idxs: set[int] = set()
     held_message_idx: int | None = None
     response_id: str | None = None
 
@@ -369,6 +375,7 @@ def stream_agent(
         held_message_idx = None
         if not text:
             return
+        flushed_message_idxs.add(idx)
         kind = _classify_message(text)
         yield TraceEvent(kind=kind, content=text, turn=idx)
 
@@ -477,16 +484,19 @@ def stream_agent(
                 held_message_idx = idx
 
         elif etype == "response.completed":
-            # End of stream. Whatever's still held is the final answer —
-            # UNLESS the agent never made a single tool call (it ended
-            # right after planning), in which case the held message is
-            # really intermediate narration and we say so.
+            # End of stream. The final answer is the last *unflushed*
+            # message — anything we already shipped as a reasoning event
+            # must NOT be recycled as the final, otherwise an agent that
+            # wrote narration + tools but forgot to compose a real
+            # synthesis echoes the narration in the answer area.
             if held_message_idx is not None:
                 final_text = (message_texts.get(held_message_idx, "") or "").strip()
                 held_message_idx = None
             else:
                 final_text = "\n\n".join(
-                    (message_texts[k] or "").strip() for k in sorted(message_texts.keys())
+                    (message_texts[k] or "").strip()
+                    for k in sorted(message_texts.keys())
+                    if k not in flushed_message_idxs
                 ).strip()
 
             if not recent_calls and final_text and len(final_text) < 250:
@@ -497,6 +507,20 @@ def stream_agent(
                 final_text = (
                     "The agent ended its turn after planning without calling any tools "
                     "— this is a rare model glitch. Please rerun the same query."
+                )
+            elif recent_calls and not final_text:
+                # Model called tools but never composed a synthesis
+                # message — happens when it gets confused and stops
+                # short. Don't lie that the narration was the answer;
+                # tell the user honestly and point at the trace.
+                tool_summary = ", ".join(
+                    f"`{name}`" for name, _ in recent_calls[-5:]
+                )
+                final_text = (
+                    "The agent called " + tool_summary + " but didn't compose a final "
+                    "answer afterwards. The tool results are visible in the trace above. "
+                    "Try rerunning the query, or rephrasing it with more specific "
+                    "constraints (element list, property ranges, intended application)."
                 )
             yield TraceEvent(kind="final", content=final_text, response_id=response_id)
             return
