@@ -51,7 +51,7 @@
   <div class="mcp-modal__card">
     <button class="mcp-modal__close" id="mcp-modal-close" aria-label="Close">✕</button>
     <h2 data-i18n="mcp.title">You're touching MCP right now.</h2>
-    <p data-i18n="mcp.body1">
+    <p data-i18n-html="mcp.body1">
       Every query you send here is routed by OpenAI's Responses API to our live MCP server at
       <code>matscout.prfo.design/mcp/http/</code>. The LLM (gpt-4o) doesn't run the 10 tools
       itself — it discovers them via MCP <code>tools/list</code>, then calls them back over HTTP.
@@ -69,7 +69,7 @@
     }
   }
 }</code></pre>
-    <p class="mcp-modal__small" data-i18n="mcp.body3">
+    <p class="mcp-modal__small" data-i18n-html="mcp.body3">
       Drop into <code>~/Library/Application Support/Claude/claude_desktop_config.json</code>
       and restart Claude. No API keys, no subprocess — it's a live network endpoint. For the
       stdio (local subprocess) flavour, see <a href="https://github.com/shorokhlev-sketch/matscout" target="_blank" rel="noopener">github.com/shorokhlev-sketch/matscout</a>.

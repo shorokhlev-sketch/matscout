@@ -324,11 +324,22 @@ async def _drive_run(run: Run) -> None:
     # from translation); we just bolt on a "respond in <lang>" directive.
     locale_hint = ""
     if run.locale == "ru":
+        # Russian glossary is intentionally strict: materials-science
+        # jargon has no canonical Russian rendering and the model tends
+        # to invent ugly transliterations (we caught it writing "выше
+        # габиита" for "above the hull"). The safest policy is "leave
+        # these tokens in English, only translate the surrounding prose".
         locale_hint = (
             "\n\nВажно: финальный ответ пользователю — на русском языке. "  # noqa: RUF001
-            "Технические термины и имена материалов оставляй как есть "
-            "(band gap, mp-149, Fd-3m, eV/atom). "
-            "Внутренние tool calls и рассуждения — на английском."
+            "ВНУТРЕННИЕ tool calls и рассуждения — на английском.\n\n"
+            "Глоссарий (эти термины оставляй на английском, не переводи и не транслитерируй):\n"
+            "  band gap, formation energy, energy above hull, convex hull, on hull, "
+            "above hull, metastable, stable, unstable, polymorph, space group, "
+            "Wyckoff, point group, formula, mp-id (mp-149, mp-66 …), "
+            "Fd-3m, P3_121, eV, eV/atom, meV, meV/atom, g/cm³, K.\n"
+            "Числа и символы химических формул — без перевода (Si, NaSn5, SiO₂). "
+            "Можно писать «материал на convex hull» или «выше convex hull на 23 meV/atom», "
+            "но НЕ «выше выпуклой оболочки» и тем более не «габиита»."  # noqa: RUF001
         )
     from matscout.agent.prompts import SYSTEM_PROMPT_V1
 

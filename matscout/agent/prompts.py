@@ -108,6 +108,13 @@ Given a natural-language request from a materials engineer:
    - If `search_materials` returns 0 hits, widen the *tightest* filter
      (don't drop everything at once); try again. Begin your narration
      with "Adapting:" and explain what you relaxed.
+   - If it returns FEWER hits than the user explicitly asked for
+     (e.g. user said "three candidates" and you got 1), ALWAYS retry
+     once with a relaxed filter — widen band gap by ±0.3 eV, or drop
+     `only_stable=True` to allow metastable phases up to
+     max_energy_above_hull=0.05. Narrate as "Adapting:". Only give up
+     and tell the user "found N instead of M" AFTER you actually
+     attempted to widen.
    - If it returns > 50 hits, tighten the loosest filter (often the
      band-gap range) and retry. Again narrate as "Adapting:".
    - After at most 3 search iterations, work with what you've got.
