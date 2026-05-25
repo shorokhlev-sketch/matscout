@@ -923,7 +923,28 @@ button.cif-link.on, button.view-link.on {
   color: var(--acc);
 }
 
-/* ── Mobile (≤ 900px) — collapse to single column + tighten everything ─── */
+/* ── Mobile (≤ 900px) — chat-style layout ─────────────────────────────────
+ *
+ * The desktop two-column grid (input | trace+answer) collapses on mobile
+ * into a familiar messenger pattern: input pinned to the bottom of the
+ * viewport, conversation (Trace → Answer → Examples) scrolling above it.
+ * The previous "two-column → one-column stack" mode produced a single
+ * very long page that the user described as "uncomfortable, undivided
+ * vertical scroll".
+ *
+ * Implementation:
+ *  - main becomes a flex column
+ *  - .col.right (Trace + Answer) lands first via flex order
+ *  - .col.left (Examples + scaffolding) lands after, so reading flow is
+ *    "current conversation first, examples as a tip"
+ *  - .q-input-block (textarea + Ask/Clear buttons) is position:fixed at
+ *    the bottom, with a backdrop-blur and a top border so it reads as
+ *    a chat composer
+ *  - body gets padding-bottom == composer height so the last conversation
+ *    line is never hidden under the fixed bar
+ *  - h1 / intro / Your-query label hidden on mobile — they were desktop
+ *    scaffolding the composer makes redundant
+ */
 @media (max-width: 900px) {
   /* Header: tighter padding, allow wrap, drop the tagline (eats width) */
   header.top {
@@ -947,9 +968,62 @@ button.cif-link.on, button.view-link.on {
   }
   .locale-switch .loc-btn { padding: 5px 11px; }
 
-  /* Tighter column padding */
-  .col { padding: 14px 14px; }
-  .col.left { border-right: none; border-bottom: 1px solid var(--border); }
+  /* Reorder: trace + answer first, examples + scaffolding below */
+  main {
+    display: flex;
+    flex-direction: column;
+    /* Leave room for the fixed composer at the bottom — tweak in
+       .q-input-block if you change its height */
+    padding-bottom: 124px;
+  }
+  .col.right { order: 1; }
+  .col.left { order: 2; }
+
+  /* Hide desktop scaffolding that the chat composer replaces */
+  .col.left h1,
+  .col.left p.intro,
+  .col.left label.q-label { display: none; }
+
+  /* Tighter column padding + drop per-column scroll so the whole page
+     scrolls naturally under the fixed composer (instead of each column
+     trying to scroll independently and confusing iOS Safari). */
+  .col {
+    padding: 14px 14px;
+    overflow-y: visible;
+    min-height: 0;
+  }
+  .col.left { border-right: none; border-top: 1px solid var(--border); }
+  body { overflow-y: auto; }
+  html, body { height: auto; min-height: 100%; }
+
+  /* Chat composer — fixed to the bottom edge of the viewport */
+  .q-input-block {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 50;
+    padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+    background: rgba(10, 10, 12, 0.92);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-top: 1px solid var(--border-hi);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .q-input-block textarea#q {
+    min-height: 44px;
+    max-height: 140px;
+    font-size: 14px;
+    padding: 10px 12px;
+  }
+  .q-input-block .btn-row {
+    margin-top: 0;
+    gap: 8px;
+  }
+  .q-input-block .btn-row button.primary { flex: 1; }
+  .q-input-block .btn-row button { padding: 10px 14px; font-size: 11px; }
 
   /* Larger tap targets on action chips */
   .mp-link, .cif-link, .view-link {
@@ -1082,7 +1156,11 @@ button.cif-link.on, button.view-link.on {
   header.top { padding: 9px 12px; }
 
   .col { padding: 11px 11px; }
-  textarea#q { min-height: 90px; }
+  /* Override the desktop min-height that the chat composer block now
+     wraps — keep composer compact on phones. */
+  .q-input-block textarea#q { min-height: 40px; }
+  /* And tighten the bottom padding main reserves under the composer. */
+  main { padding-bottom: 116px; }
 
   /* Examples even bigger tap area, but trim long examples to fewer lines */
   .examples li {
