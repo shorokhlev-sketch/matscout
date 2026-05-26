@@ -984,17 +984,35 @@ button.cif-link.on, button.view-link.on {
   .col.left p.intro,
   .col.left label.q-label { display: none; }
 
-  /* Tighter column padding + drop per-column scroll so the whole page
-     scrolls naturally under the fixed composer (instead of each column
-     trying to scroll independently and confusing iOS Safari). */
+  /* Single-scroll on mobile.
+     Desktop rules make body height:100%, main flex:1, .col overflow-y:
+     auto — that gives each column its own scrollbar. On mobile we want
+     ONE scroll container (the page) and the composer fixed at the
+     bottom. Force everything to natural flow with !important; the
+     rules are local to this media query and have no other override
+     site, so the heavy hand is acceptable. */
+  html, body {
+    height: auto !important;
+    min-height: 100vh !important;
+    overflow-y: auto !important;
+  }
+  body {
+    display: block !important;
+    overflow-x: hidden;
+  }
+  main {
+    display: flex !important;
+    flex-direction: column;
+    flex: 0 1 auto !important;
+    min-height: 0 !important;
+  }
   .col {
     padding: 14px 14px;
-    overflow-y: visible;
-    min-height: 0;
+    overflow: visible !important;
+    min-height: 0 !important;
+    flex: 0 0 auto !important;
   }
   .col.left { border-right: none; border-top: 1px solid var(--border); }
-  body { overflow-y: auto; }
-  html, body { height: auto; min-height: 100%; }
 
   /* Chat composer — fixed to the bottom edge of the viewport */
   .q-input-block {

@@ -53,13 +53,17 @@ _DISCOVERY_TOOL_NAMES: list[str] = [
     "find_solar_absorber",
     "find_thermoelectric",
     "find_transparent_conductor",
-    "find_2d_materials",
-    "get_jarvis_topological",
     "find_cod_experimental",
     "optimade_search",
     "find_preprints",
     "search_openalex",
     "get_wikipedia_summary",
+    # JARVIS-DFT direct tools dropped from the agent's allow-list 2026-05.
+    # NIST static dumps return 502 and the agent kept calling them as a
+    # general fallback, polluting the trace with "unavailable" payloads.
+    # JARVIS data is still reachable on demand via
+    # optimade_search(providers=["jarvis"], filter=…) for queries that
+    # genuinely need it (2D / monolayer / topological).
 ]
 _ANALYSIS_TOOL_NAMES: list[str] = [
     "get_material",
@@ -77,9 +81,6 @@ _ANALYSIS_TOOL_NAMES: list[str] = [
     "find_preprints",
     "search_openalex",
     "get_wikipedia_summary",
-    # Cross-validation: analysis phase may also re-query
-    "find_2d_materials",
-    "get_jarvis_topological",
     "find_cod_experimental",
     "optimade_search",
 ]

@@ -42,9 +42,11 @@ Do NOT give a recommendation. Just produce a clean candidate set.
    - "solar absorber" / "photovoltaic" → find_solar_absorber
    - "thermoelectric" / "Seebeck" / "ZT" → find_thermoelectric
    - "transparent conductor" / "TCO" → find_transparent_conductor
-   - "2D material" / "monolayer" / "MXene" → find_2d_materials
-   - "topological insulator" / "Weyl" / "Dirac semimetal"
-     → get_jarvis_topological
+   - "2D material" / "monolayer" / "MXene" →
+     optimade_search(providers=["jarvis"], filter=…)
+   - "topological insulator" / "Weyl" / "Dirac semimetal" →
+     optimade_search(providers=["jarvis"], filter=…) +
+     find_preprints("<material> topological", max_age_days=730)
 
    Cross-source aggregation:
    - "compare across databases" / "what does AFLOW / COD say" /
@@ -92,11 +94,10 @@ Do NOT give a recommendation. Just produce a clean candidate set.
    search_materials and one find_* combinator, you've failed the
    "deep research" framing.
 
-4. JARVIS tools (`find_2d_materials`, `get_jarvis_topological`) are
-   ONLY for explicit 2D-material / monolayer / topological / Weyl /
-   Dirac / spin-Hall queries. NIST's static endpoints currently return
-   502; the JARVIS data path that DOES work is
-   `optimade_search(providers=['jarvis'], filter=...)`. Use that.
+4. JARVIS data is accessed via
+   `optimade_search(providers=['jarvis'], filter=...)`. Use it ONLY
+   for explicit 2D-material / monolayer / topological / Weyl / Dirac
+   queries — never as a generic cross-validation fallback.
 
 5. If the first hit is obviously inappropriate for the user's
    application (radioactive element for a battery, toxic for
@@ -155,8 +156,10 @@ the final answer.
 
 2. **Cross-validate ONE non-trivial claim** (only if relevant to the
    user's question) AFTER the drill-in:
-   - "topological" / "Weyl" / "Dirac" → get_jarvis_topological
-   - "2D" / "monolayer" / "MXene" → find_2d_materials
+   - "topological" / "Weyl" / "Dirac" → optimade_search(providers=
+     ["jarvis"], filter=…) + find_preprints
+   - "2D" / "monolayer" / "MXene" →
+     optimade_search(providers=["jarvis"], filter=…)
    - "synthesis pathway" / "decomposition" → compute_phase_diagram_strict
    - "has this been synthesised" / "experimental" → find_cod_experimental
    - "what does AFLOW / OQMD say" → optimade_search across providers
@@ -292,8 +295,8 @@ element shortlists / ranges so you don't have to guess.
                                           with Pareto frontier flag
 
 ## Second DFT source — for what MP doesn't cover
-  - find_2d_materials(elements?, ...)    — JARVIS-DFT 2D / monolayers / TMDCs
-  - get_jarvis_topological()             — JARVIS topological insulators / Weyl
+  - optimade_search(providers=["jarvis"], filter=…) — JARVIS-DFT
+    (2D / monolayers / TMDCs / topological) via the OPTIMADE federation
 
 ## Computational interop
   - get_structure(mp_id, fmt)            — CIF / POSCAR / XYZ blob ready for
@@ -352,12 +355,11 @@ hull (energy_above_hull ≈ 0), "metastable" up to ~25 meV/atom above,
    user time in this UI.
 
 6. **Cross-validate against a second source when claims are
-   non-trivial.** If you said "topological", check
-   get_jarvis_topological. If you said "2D / monolayer", check
-   find_2d_materials. If you cite a synthesis prediction, run
-   compute_phase_diagram_strict. If you cite a recent finding, pull a
-   preprint via find_preprints. The agent's job is to corroborate
-   numbers, not just surface them.
+   non-trivial.** If you said "topological" or "2D / monolayer", check
+   optimade_search(providers=["jarvis"], filter=…). If you cite a
+   synthesis prediction, run compute_phase_diagram_strict. If you cite
+   a recent finding, pull a preprint via find_preprints. The agent's
+   job is to corroborate numbers, not just surface them.
 
 7. **Rank with pareto_rank for the FINAL shortlist.** When you have
    ≥3 candidates and ≥2 competing properties, call pareto_rank with
