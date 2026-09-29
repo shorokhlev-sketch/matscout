@@ -3,7 +3,8 @@
 OPTIMADE (https://optimade.org/) is a standardised REST protocol that
 10+ materials databases speak: Materials Project, AFLOW, COD, JARVIS-
 DFT, NOMAD, MPDS, AiiDA, Materials Cloud, and more. One filter
-expression, one results shape, many sources.
+expression, one results shape, many sources. matscout queries 6 of
+them (``_PROVIDERS`` below): mp, cod, nomad, alexandria, jarvis, odbx.
 
 This tool issues the SAME query against several providers in parallel
 and merges + tags the results. The agent gets cross-source coverage
@@ -12,7 +13,7 @@ without having to know each database's idiosyncrasies. Useful when:
   - You need redundancy / cross-validation across DFT databases
     (catch entries that MP missed but OQMD has, or vice versa).
   - You want experimental ground-truth alongside DFT predictions
-    (COD ≈ experimental refinements; MP / AFLOW / JARVIS ≈ DFT).
+    (COD ≈ experimental refinements; MP / JARVIS / Alexandria ≈ DFT).
   - You want broader coverage of structural / topological / 2D data.
 
 Filter syntax is OPTIMADE's filter language, e.g.
@@ -30,7 +31,7 @@ import httpx
 from matscout.tools._client import get_cache
 
 # Curated provider list. Stable + reachable from typical hosts. Each
-# entry is (id, label, base_url) — base_url is the OPTIMADE v1 root.
+# entry is (id, label, base_url) - base_url is the OPTIMADE v1 root.
 _PROVIDERS: dict[str, tuple[str, str]] = {
     "mp": (
         "Materials Project",
@@ -76,7 +77,7 @@ def _query_one(
     session-manager event loop, where ``asyncio.run`` blows up. Parallel
     fan-out happens at the caller via ``ThreadPoolExecutor``.
     """
-    # OPTIMADE spec lets us encode the filter with %20 + %22 escapes —
+    # OPTIMADE spec lets us encode the filter with %20 + %22 escapes -
     # safer than httpx's default URL composition for filter operators.
     safe_filter = optimade_filter.replace(" ", "%20").replace('"', "%22")
     url = f"{base_url}/structures?filter={safe_filter}&page_limit={page_limit}"
@@ -142,7 +143,7 @@ def optimade_search(
     providers: list[str] | None = None,
     page_limit: int = 5,
 ) -> dict[str, Any]:
-    """Federated OPTIMADE search — query several materials databases at once.
+    """Federated OPTIMADE search - query several materials databases at once.
 
     Issues the same filter against each provider in parallel, returns
     per-provider hit lists tagged by source. Use when you want cross-
@@ -153,8 +154,8 @@ def optimade_search(
             ``'elements HAS "Si" AND nelements=1'`` (pure Si) or
             ``'chemical_formula_reduced="Fe2O3"'``.
         providers: which providers to query. Defaults to all curated
-            providers. Recognised ids: ``mp``, ``aflow``, ``cod``,
-            ``jarvis``, ``mcloud``, ``odbx``, ``mpdd``.
+            providers. Recognised ids: ``mp``, ``cod``, ``nomad``,
+            ``alexandria``, ``jarvis``, ``odbx``.
         page_limit: max hits per provider (1-50).
 
     Returns:
@@ -168,11 +169,11 @@ def optimade_search(
         }``
 
     Notes on the data:
-        - Each provider returns its own native identifier — MP uses
-          ``mp-XXXX``, AFLOW uses ``aflow:auid:...``, COD uses
-          ``cod:NNNNNN``, JARVIS uses ``jarvis:JVASP-NNNN``.
-        - DFT databases (MP, AFLOW, JARVIS) describe relaxed structures
-          at 0 K, 0 GPa. COD entries are EXPERIMENTAL refinements —
+        - Each provider returns its own native identifier - MP uses
+          ``mp-XXXX``, COD uses ``cod:NNNNNN``, JARVIS uses
+          ``jarvis:JVASP-NNNN``.
+        - DFT databases (MP, JARVIS, Alexandria) describe relaxed structures
+          at 0 K, 0 GPa. COD entries are EXPERIMENTAL refinements -
           ground truth, often the right cross-check when DFT predicts
           something exotic.
     """
@@ -194,14 +195,12 @@ def optimade_search(
     # Sync fan-out via threads. We're called from inside an already-
     # running event loop (MCP session_manager.run() context), so
     # asyncio.run / asyncio.gather here would error out. Threads are
-    # the safest cross-context primitive — each HTTP call holds the
+    # the safest cross-context primitive - each HTTP call holds the
     # GIL only briefly, the long wait is network I/O which releases it.
     with ThreadPoolExecutor(max_workers=min(len(chosen), 6)) as pool:
         results = list(
             pool.map(
-                lambda pid: _query_one(
-                    pid, _PROVIDERS[pid][1], optimade_filter, page_limit
-                ),
+                lambda pid: _query_one(pid, _PROVIDERS[pid][1], optimade_filter, page_limit),
                 chosen,
             )
         )

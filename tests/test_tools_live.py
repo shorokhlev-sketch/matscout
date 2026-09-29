@@ -4,7 +4,7 @@ All marked @pytest.mark.live → auto-skipped by conftest when env vars
 are missing (so PR CI runs green without secrets, while local runs with
 the key actually hit production).
 
-Cache stays the per-process default — first run touches the API, repeats
+Cache stays the per-process default - first run touches the API, repeats
 do not. That's intentional: live tests double as smoke tests for the
 cache layer.
 """
@@ -24,9 +24,7 @@ from matscout.tools import (
 pytestmark = pytest.mark.live
 
 
-# ── search_materials ───────────────────────────────────────────────────────
-
-
+# ---- search_materials ----
 def test_live_search_si_o_in_band_gap_window() -> None:
     """Si-O materials with band_gap in 1.0-2.0 eV should exist (sub-stoichiometric SiO_x)."""
     hits = search_materials(elements=["Si", "O"], band_gap_range=(1.0, 2.0), limit=20)
@@ -54,9 +52,7 @@ def test_live_search_exclude_elements_works() -> None:
         assert "O" not in c.elements
 
 
-# ── get_material ───────────────────────────────────────────────────────────
-
-
+# ---- get_material ----
 def test_live_get_material_silicon() -> None:
     """mp-149 is the canonical Si entry; band_gap ~0.6 eV (DFT-PBE underestimate)."""
     m = get_material("mp-149")
@@ -69,11 +65,9 @@ def test_live_get_material_silicon() -> None:
     assert m.symmetry.spacegroup_number == 227  # Fd-3m
 
 
-# ── compare_materials ──────────────────────────────────────────────────────
-
-
+# ---- compare_materials ----
 def test_live_compare_si_and_diamond() -> None:
-    """Si vs diamond — well-known DFT-PBE benchmark; gaps must both be > 0."""
+    """Si vs diamond - well-known DFT-PBE benchmark; gaps must both be > 0."""
     table = compare_materials(["mp-149", "mp-66"])  # Si, C (diamond)
     assert len(table.rows) == 2
     assert "band_gap" in table.properties
@@ -86,9 +80,7 @@ def test_live_compare_si_and_diamond() -> None:
     assert c_gap > 4.0, "diamond DFT-PBE gap should be > 4 eV"
 
 
-# ── check_stability ────────────────────────────────────────────────────────
-
-
+# ---- check_stability ----
 def test_live_silicon_is_stable() -> None:
     r = check_stability("mp-149")
     assert r.verdict is Verdict.STABLE
@@ -98,14 +90,12 @@ def test_live_silicon_is_stable() -> None:
     assert "convex hull" in r.explanation.lower()
 
 
-# ── acceptance scenarios (full chain, no agent yet) ───────────────────────
-
-
+# ---- acceptance scenarios (full chain, no agent yet) ----
 def test_live_acceptance_semiconductor_for_solar_cell() -> None:
     """Acceptance #1: 'Stable semiconductor with band gap ~1.5 eV for solar cell.'
 
     1.0-1.7 eV is the Shockley-Queisser sweet spot for single-junction PV.
-    Tools must surface real, named candidates — not an empty list.
+    Tools must surface real, named candidates - not an empty list.
     """
     hits = search_materials(
         band_gap_range=(1.0, 1.7),

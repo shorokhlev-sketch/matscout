@@ -143,7 +143,7 @@ def compute_phase_diagram_strict(
         f"{len(entries) - len(stable_rows)} are off-hull. "
         + (
             f"Showing decomposition reactions for the {len(decompositions)} closest-to-hull "
-            f"metastable phases — these are the products their synthesis would compete with."
+            f"metastable phases: these are the products their synthesis would compete with."
             if decompositions
             else ""
         )

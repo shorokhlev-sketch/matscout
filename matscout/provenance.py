@@ -1,4 +1,4 @@
-"""Snapshot metadata builder — the 'when, where, with what' of each run.
+"""Snapshot metadata builder - the 'when, where, with what' of each run.
 
 Embedded into every research snapshot at save time. Surfaces in the UI
 footer of /r/{id} pages and in the BibTeX note.
@@ -77,7 +77,7 @@ def build_metadata(*, model: str = "gpt-4o") -> dict[str, Any]:
     """Snapshot of build-time + run-time provenance.
 
     These values change per deploy (commit SHA) or per cold-start of the
-    process (timestamps), but stay constant within a single agent run —
+    process (timestamps), but stay constant within a single agent run -
     safe to bake into the saved snapshot once at the end.
     """
     return {
@@ -87,7 +87,7 @@ def build_metadata(*, model: str = "gpt-4o") -> dict[str, Any]:
         "openai_sdk_version": _openai_sdk_version(),
         "model": model,
         "snapshot_built_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "mp_data_source": "Materials Project · next-gen.materialsproject.org",
+        "mp_data_source": "Materials Project (next-gen.materialsproject.org)",
         "mp_data_license": "CC-BY 4.0",
         "mp_canonical_citation": (
             "Jain et al. The Materials Project: A materials genome approach to "

@@ -1,4 +1,4 @@
-"""get_material — full property sheet for a single MP id, with cache."""
+"""get_material - full property sheet for a single MP id, with cache."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from typing import Any
 from matscout.models import Material, Symmetry
 from matscout.tools._client import get_cache, get_client
 
-# Full sheet — superset of what search_materials pulls. Avoid heavy fields
+# Full sheet - superset of what search_materials pulls. Avoid heavy fields
 # like raw `structure` and `dos` here; the agent can ask for them by name
 # in a follow-up if it ever needs them.
 _FULL_FIELDS = [
@@ -66,7 +66,7 @@ def _doc_to_material(doc: Any) -> Material:
             symmetry = None
 
     # MP returns bulk_modulus / shear_modulus either as a dict
-    # {voigt, reuss, vrh} or sometimes a pymatgen object — normalize to dict.
+    # {voigt, reuss, vrh} or sometimes a pymatgen object - normalize to dict.
     def _modulus(val: Any) -> dict[str, float] | None:
         if val is None:
             return None

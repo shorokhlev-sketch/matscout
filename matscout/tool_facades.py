@@ -1,7 +1,7 @@
 """Flat-kwarg facades over the typed ``tools/*`` functions.
 
 Both the MCP server and the OpenAI agent want their tools described in
-flat JSON-schema (primitives and arrays only — no nested Pydantic models).
+flat JSON-schema (primitives and arrays only - no nested Pydantic models).
 Underneath, the typed Pydantic-driven implementations are the source of
 truth. These facades:
 
@@ -224,7 +224,7 @@ def find_papers(
     Use this for 'literature review' style asks. Returns up to `limit`
     papers with title, authors, year, venue, DOI, abstract snippet, and
     citation count. Bias the agent to call this after finding candidates
-    in MP — readers want context, not just numbers.
+    in MP - readers want context, not just numbers.
 
     Args:
         query: free-text query, e.g. 'cathode materials Na-ion battery'.
@@ -251,7 +251,7 @@ def get_papers_about(
 
 
 def get_doi_metadata(doi: str) -> dict[str, Any]:
-    """Resolve a DOI to a canonical bibrecord (CrossRef).
+    """Resolve a DOI to a canonical bibrecord (Crossref).
 
     Use this to expand a DOI string from the user or from another tool's
     result into authors / year / journal / abstract.
@@ -267,7 +267,7 @@ def get_structure(
 
     Use this when the user wants to download/use the structure file in their
     own calculation. `fmt`:
-      - 'cif'    → CIF (Quantum ESPRESSO, GPAW, OVITO, VESTA — recommended default)
+      - 'cif'    → CIF (Quantum ESPRESSO, GPAW, OVITO, VESTA - recommended default)
       - 'poscar' → POSCAR (VASP)
       - 'xyz'    → XYZ (visualization only, periodicity is lost)
 
@@ -291,9 +291,7 @@ def find_preprints(
     return _find_preprints(query, max_age_days=max_age_days, limit=limit).model_dump(mode="json")
 
 
-# ── Application-aware combinators ──────────────────────────────────────────
-
-
+# ---- Application-aware combinators ----
 def _wrap_list(cands: list[Any]) -> dict[str, Any]:
     """Return a single-dict wrapper so FastMCP serialises one content block.
 
@@ -371,7 +369,7 @@ def find_thermoelectric(
     target_gap: str = "narrow",
     limit: int = 10,
 ) -> dict[str, Any]:
-    """Thermoelectric candidates — narrow-gap, often heavy chalcogenide.
+    """Thermoelectric candidates - narrow-gap, often heavy chalcogenide.
 
     Use for "thermoelectric", "Seebeck", "ZT", "Peltier". Returns
     ``{"count": N, "materials": [...]}``.
@@ -398,9 +396,7 @@ def find_transparent_conductor(
     return _wrap_list(_find_transparent_conductor(limit=limit))
 
 
-# ── Property-sheet expansions ──────────────────────────────────────────────
-
-
+# ---- Property-sheet expansions ----
 def get_elastic_properties(material_id: str) -> dict[str, Any]:
     """Bulk modulus, shear modulus, hardness for one mp-id.
 
@@ -422,9 +418,7 @@ def get_electronic_summary(material_id: str) -> dict[str, Any]:
     return _get_electronic_summary(material_id)
 
 
-# ── Strict analytics ───────────────────────────────────────────────────────
-
-
+# ---- Strict analytics ----
 def compute_phase_diagram_strict(
     chemsys: str,
     include_decomposition: bool = True,
@@ -452,9 +446,7 @@ def compute_phase_diagram_strict(
     )
 
 
-# ── Multi-criteria ranking ─────────────────────────────────────────────────
-
-
+# ---- Multi-criteria ranking ----
 def pareto_rank(
     material_ids: list[str],
     criteria: list[dict[str, Any]],
@@ -487,9 +479,7 @@ def pareto_rank(
     return _pareto_rank(material_ids, criteria, limit=limit)
 
 
-# ── JARVIS-DFT (NIST) ──────────────────────────────────────────────────────
-
-
+# ---- JARVIS-DFT (NIST) ----
 def find_2d_materials(
     elements: list[str] | None = None,
     max_exfoliation_energy_meV: float | None = None,
@@ -527,9 +517,7 @@ def get_jarvis_topological() -> dict[str, Any]:
     return _get_jarvis_topological()
 
 
-# ── Federated cross-source search (OPTIMADE) ──────────────────────────────
-
-
+# ---- Federated cross-source search (OPTIMADE) ----
 def optimade_search(
     optimade_filter: str,
     providers: list[str] | None = None,
@@ -537,18 +525,18 @@ def optimade_search(
 ) -> dict[str, Any]:
     """Federated OPTIMADE search across multiple materials databases.
 
-    OPTIMADE is a standardised REST protocol that 10+ providers all
-    speak. One filter, many sources. Use when you want cross-source
-    coverage (catch entries that MP missed but OQMD has) or
-    experimental ground truth alongside DFT predictions.
+    OPTIMADE is a standardised REST protocol that many materials
+    databases speak. One filter, many sources. Use when you want
+    cross-source coverage (catch entries that MP missed but another
+    database has) or experimental ground truth alongside DFT predictions.
 
     Args:
         optimade_filter: OPTIMADE filter-language string, e.g.
             ``'elements HAS "Si" AND nelements=1'`` (pure Si) or
             ``'chemical_formula_reduced="Fe2O3"'``.
-        providers: which providers to query. Defaults to all curated.
-            Recognised: ``mp``, ``aflow``, ``cod``, ``jarvis``,
-            ``mcloud``, ``odbx``, ``mpdd``.
+        providers: which providers to query. Defaults to all 6 curated.
+            Recognised: ``mp``, ``cod``, ``nomad``, ``alexandria``,
+            ``jarvis``, ``odbx``. Any other id raises an error.
         page_limit: max hits per provider (1-50).
     """
     return _optimade_search(
@@ -558,20 +546,18 @@ def optimade_search(
     )
 
 
-# ── Experimental crystal structures (COD direct) ───────────────────────────
-
-
+# ---- Experimental crystal structures (COD direct) ----
 def find_cod_experimental(
     elements: list[str] | None = None,
     chemical_formula: str | None = None,
     space_group_number: int | None = None,
     limit: int = 8,
 ) -> dict[str, Any]:
-    """Search Crystallography Open Database — experimental refinements.
+    """Search Crystallography Open Database - experimental refinements.
 
     COD entries are EXPERIMENTAL crystal structures from X-ray /
     neutron diffraction refinements, not DFT predictions. Use this to
-    cross-check DFT databases (MP / AFLOW / JARVIS) against
+    cross-check DFT databases (MP / JARVIS / Alexandria) against
     real-world ground truth, or to answer "has this been synthesized".
 
     Args:
@@ -588,9 +574,7 @@ def find_cod_experimental(
     )
 
 
-# ── Literature: OpenAlex (240M+ works, stable replacement for S2) ──────────
-
-
+# ---- Literature: OpenAlex (240M+ works, stable replacement for S2) ----
 def search_openalex(
     query: str,
     year_from: int | None = None,
@@ -619,16 +603,14 @@ def search_openalex(
     )
 
 
-# ── Wikipedia (textbook context / definitions only) ────────────────────────
-
-
+# ---- Wikipedia (textbook context / definitions only) ----
 def get_wikipedia_summary(title: str, lang: str = "en") -> dict[str, Any]:
-    """One-paragraph Wikipedia lead — for definitions and historical context.
+    """One-paragraph Wikipedia lead - for definitions and historical context.
 
     Use sparingly. Wikipedia is fine for "what is the Shockley-Queisser
-    limit" / "what is a Wadsley-Roth phase" — pop-science definitions
+    limit" / "what is a Wadsley-Roth phase" - pop-science definitions
     the DFT databases don't carry. Do NOT cite numerical claims from
-    Wikipedia without cross-checking against MP / JARVIS / CrossRef /
+    Wikipedia without cross-checking against MP / JARVIS / Crossref /
     arXiv.
 
     Args:
@@ -638,7 +620,7 @@ def get_wikipedia_summary(title: str, lang: str = "en") -> dict[str, Any]:
     return _get_wikipedia_summary(title, lang=lang)
 
 
-# Canonical registry — both MCP server and agent runner iterate over this list.
+# Canonical registry - both MCP server and agent runner iterate over this list.
 ALL_TOOLS: list[Callable[..., Any]] = [
     # Property lookup
     search_materials,
@@ -650,7 +632,7 @@ ALL_TOOLS: list[Callable[..., Any]] = [
     predict_decomposition,
     get_competing_phases,
     compute_phase_diagram_strict,
-    # Application-tuned discovery (Phase 1 — domain combinators)
+    # Application-tuned discovery (Phase 1 - domain combinators)
     find_battery_anode,
     find_battery_cathode,
     find_solar_absorber,
@@ -663,14 +645,14 @@ ALL_TOOLS: list[Callable[..., Any]] = [
     pareto_rank,
     # Computational interop
     get_structure,
-    # JARVIS-DFT (NIST) — second DFT source covering 2D / topological
+    # JARVIS-DFT (NIST) - second DFT source covering 2D / topological
     find_2d_materials,
     get_jarvis_topological,
-    # Federated cross-source search (OPTIMADE: MP + AFLOW + COD + JARVIS + …)
+    # Federated cross-source search (OPTIMADE: MP, COD, NOMAD, Alexandria, JARVIS, odbx)
     optimade_search,
     # Experimental crystal structures (COD direct)
     find_cod_experimental,
-    # Literature (CrossRef, arXiv, OpenAlex, Wikipedia)
+    # Literature (Crossref, arXiv, OpenAlex, Wikipedia)
     get_doi_metadata,
     find_preprints,
     search_openalex,

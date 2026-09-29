@@ -1,4 +1,4 @@
-"""Offline tests for the tool layer — no network, no real MP.
+"""Offline tests for the tool layer - no network, no real MP.
 
 Inject a mock MPRester through `tools._client.set_client()` and an in-tmp
 SQLite cache through `tools._client.set_cache()`. This lets us verify
@@ -25,9 +25,8 @@ from matscout.tools import (
 )
 from matscout.tools._client import set_cache, set_client
 
-# ── tiny fixture machinery — mock MPRester ──────────────────────────────────
 
-
+# ---- tiny fixture machinery - mock MPRester ----
 @dataclass
 class _FakeElement:
     symbol: str
@@ -82,7 +81,7 @@ class _FakeSummary:
         self.last_kwargs = kwargs
         self.call_count += 1
         # When a specific id is requested (as get_material does), filter the
-        # canned docs to match — otherwise the fake would always return the
+        # canned docs to match - otherwise the fake would always return the
         # same doc regardless of which id you asked for.
         wanted_ids = kwargs.get("material_ids")
         if wanted_ids:
@@ -141,9 +140,7 @@ def _isolated_state(tmp_path: Path) -> Any:
     set_cache(None)
 
 
-# ── filter translation ──────────────────────────────────────────────────────
-
-
+# ---- filter translation ----
 def test_search_passes_elements_to_mp() -> None:
     out = search_materials(SearchFilters(elements=["Si", "O"]))
     assert len(out) == 2  # both fake docs returned
@@ -194,9 +191,7 @@ def test_search_accepts_kwargs_form() -> None:
     assert len(out) >= 1
 
 
-# ── doc → Candidate mapping ─────────────────────────────────────────────────
-
-
+# ---- doc to Candidate mapping ----
 def test_candidate_mapping_normalizes_elements() -> None:
     out = search_materials(SearchFilters(elements=["Si"]))
     si = next(c for c in out if c.material_id == "mp-149")
@@ -216,9 +211,7 @@ def test_limit_truncates_response() -> None:
     assert len(out) == 1
 
 
-# ── cache behaviour ─────────────────────────────────────────────────────────
-
-
+# ---- cache behavior ----
 def test_cache_hit_skips_api() -> None:
     from matscout.tools._client import get_client
 
@@ -247,9 +240,7 @@ def test_cache_returns_equivalent_candidates() -> None:
     assert [c.model_dump() for c in first] == [c.model_dump() for c in second]
 
 
-# ── get_material ────────────────────────────────────────────────────────────
-
-
+# ---- get_material ----
 def test_get_material_returns_full_sheet() -> None:
     m = get_material("mp-149")
     assert m.material_id == "mp-149"
@@ -301,9 +292,7 @@ def test_get_material_handles_missing_bulk_modulus() -> None:
     assert m.shear_modulus is None
 
 
-# ── compare_materials ──────────────────────────────────────────────────────
-
-
+# ---- compare_materials ----
 def test_compare_default_properties() -> None:
     t = compare_materials(["mp-149", "mp-2534"])
     assert len(t.rows) == 2
@@ -344,9 +333,7 @@ def test_compare_passes_through_get_material_cache() -> None:
     assert client.materials.summary.call_count == base  # type: ignore[attr-defined]
 
 
-# ── check_stability ────────────────────────────────────────────────────────
-
-
+# ---- check_stability ----
 def test_check_stability_on_hull_returns_stable() -> None:
     r = check_stability("mp-149")  # fake doc has e_above_hull=0.0
     assert r.verdict is Verdict.STABLE

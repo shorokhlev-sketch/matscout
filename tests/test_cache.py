@@ -1,4 +1,4 @@
-"""Cache invariants — hit/miss, TTL, key stability, observability."""
+"""Cache invariants - hit/miss, TTL, key stability, observability."""
 
 from __future__ import annotations
 
@@ -14,9 +14,7 @@ def cache(tmp_path: Path) -> Cache:
     return Cache(db_path=tmp_path / "test.db", ttl_seconds=3600)
 
 
-# ── key stability ────────────────────────────────────────────────────────────
-
-
+# ---- key stability ----
 def test_canonical_args_order_independent() -> None:
     a = _canonical_args({"x": 1, "y": [3, 2, 1]})
     b = _canonical_args({"y": [3, 2, 1], "x": 1})
@@ -35,9 +33,7 @@ def test_hash_changes_with_arg_value() -> None:
     assert _hash("search", {"x": 1}) != _hash("search", {"x": 2})
 
 
-# ── miss / put / get ─────────────────────────────────────────────────────────
-
-
+# ---- miss / put / get ----
 def test_miss_returns_none(cache: Cache) -> None:
     assert cache.get("search", {"q": "x"}) is None
 
@@ -57,9 +53,7 @@ def test_put_overwrites_and_resets_hit_count(cache: Cache) -> None:
     assert stats["by_tool"]["search"]["hits"] == 0
 
 
-# ── TTL ──────────────────────────────────────────────────────────────────────
-
-
+# ---- TTL ----
 def test_ttl_expiry(tmp_path: Path) -> None:
     now = [1_000_000]
     c = Cache(db_path=tmp_path / "ttl.db", ttl_seconds=60, clock=lambda: now[0])
@@ -83,9 +77,7 @@ def test_vacuum_removes_expired(tmp_path: Path) -> None:
     assert c.get("search", {"q": "b"}) == {"v": 2}
 
 
-# ── stats / clear ────────────────────────────────────────────────────────────
-
-
+# ---- stats / clear ----
 def test_stats_increment_hit_count(cache: Cache) -> None:
     cache.put("search", {"q": "x"}, {"v": 1})
     cache.get("search", {"q": "x"})

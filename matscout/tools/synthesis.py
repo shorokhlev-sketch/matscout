@@ -1,4 +1,4 @@
-"""Synthesis-aware tools — phase diagrams, decomposition, competing phases.
+"""Synthesis-aware tools - phase diagrams, decomposition, competing phases.
 
 These three sit on top of the same MPRester + cache as the rest of the
 toolset. They turn the agent from a "find me a stable material" assistant
@@ -6,9 +6,9 @@ into a "find me a stable material AND tell me what I'd actually have to
 fight in the lab" assistant.
 
 Naming convention:
-    get_phase_diagram(chemsys)        — every entry in the chemsys + hull marks
-    predict_decomposition(mp_id)      — for off-hull phases, what does it decay into?
-    get_competing_phases(formula)     — alternative stoichiometries in the same chemsys
+    get_phase_diagram(chemsys)        - every entry in the chemsys + hull marks
+    predict_decomposition(mp_id)      - for off-hull phases, what does it decay into?
+    get_competing_phases(formula)     - alternative stoichiometries in the same chemsys
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from matscout.models import Candidate, Symmetry
 from matscout.tools._client import get_cache, get_client
 from matscout.tools.get import get_material
 
-# Fields requested for phase-diagram-style queries — same compact set as
+# Fields requested for phase-diagram-style queries - same compact set as
 # search_materials so output stays digestible for the LLM.
 _PHASE_FIELDS = [
     "material_id",
@@ -49,7 +49,7 @@ def _normalize_chemsys(chemsys: str) -> str:
 
 
 def _doc_to_candidate(doc: Any) -> Candidate:
-    """Same mapping as in search.py — duplicated here to avoid an import cycle."""
+    """Same mapping as in search.py - duplicated here to avoid an import cycle."""
     elements_raw = getattr(doc, "elements", None) or []
     elements: list[str] = [
         getattr(e, "symbol", None) or getattr(e, "name", None) or str(e) for e in elements_raw
@@ -95,7 +95,7 @@ def get_phase_diagram(
     Args:
         chemsys: dash-separated element list, e.g. ``"Li-Fe-O"`` or
             ``"Si-O"``. Order doesn't matter; we canonicalize.
-        max_energy_above_hull: cap (eV/atom). Defaults to 200 meV/atom —
+        max_energy_above_hull: cap (eV/atom). Defaults to 200 meV/atom -
             broad enough to see the metastable neighborhood, narrow
             enough to keep the response readable.
         limit: max phases to return.
@@ -129,12 +129,12 @@ def get_phase_diagram(
     )
 
     # A phase diagram without its elemental endpoints is geometrically
-    # degenerate — there's nothing for the convex hull to anchor on.
+    # degenerate - there's nothing for the convex hull to anchor on.
     # MP rarely surfaces them in a multi-element chemsys query (a search
     # over chemsys="Li-O" filters to compounds, not pure Li or pure O),
     # so we fetch the stable elemental references explicitly using
-    # ``elements=[X], nelements=1`` — the MP-idiomatic way to ask for
-    # the pure-element entries — and keep just the lowest-EAH one per
+    # ``elements=[X], nelements=1`` - the MP-idiomatic way to ask for
+    # the pure-element entries - and keep just the lowest-EAH one per
     # element. Cheap (one MP call per element, both cached).
     elements_in_chemsys = canon.split("-")
     if len(elements_in_chemsys) >= 2:
@@ -193,7 +193,7 @@ def predict_decomposition(material_id: str) -> dict[str, Any]:
     PhaseDiagram object (we'd have to fetch every entry in the chemsys
     and run convex-hull algebra). That's heavy for what we can offer
     without a pymatgen-grade compute backend. The honest substitute:
-    return the *stable phases in the same chemsys* — these are exactly
+    return the *stable phases in the same chemsys* - these are exactly
     the products such a decomposition would have to land on. The agent
     can reason about ratios from there.
 
@@ -227,7 +227,7 @@ def predict_decomposition(material_id: str) -> dict[str, Any]:
         verdict = "unstable"
     elif e <= 1e-9:
         interpretation = (
-            "This phase IS on the convex hull — it does not decompose under "
+            "This phase IS on the convex hull; it does not decompose under "
             "equilibrium conditions. The 'competing_stable_phases' here are just "
             "the rest of the hull (including this entry itself)."
         )
@@ -274,11 +274,11 @@ def get_competing_phases(
 
     Args:
         formula: pretty formula, e.g. ``"Fe2O3"`` or ``"LiFePO4"``.
-        max_energy_above_hull: cap (eV/atom) — same semantics as in
+        max_energy_above_hull: cap (eV/atom) - same semantics as in
             ``get_phase_diagram``.
         limit: max phases to return.
     """
-    # Cache key independent of MP query — chemsys is derived from formula.
+    # Cache key independent of MP query - chemsys is derived from formula.
     cache_args = {
         "formula": formula,
         "max_eah": max_energy_above_hull,
@@ -289,7 +289,7 @@ def get_competing_phases(
     if cached is not None:
         return cached  # already JSON-safe
 
-    # We need a chemsys to query — easiest path is one MP roundtrip for the
+    # We need a chemsys to query - easiest path is one MP roundtrip for the
     # base formula to learn its element set.
     client = get_client()
     seed = client.materials.summary.search(

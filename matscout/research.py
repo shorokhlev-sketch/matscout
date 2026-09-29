@@ -6,7 +6,7 @@ cache and are reachable by request_id forever (until the operator GCs).
 
 The point: when you cite a matscout result in a thesis/paper, the reader
 should be able to open the URL and see *exactly* the reasoning trail you
-relied on — not a fresh agent run that might give a different answer.
+relied on - not a fresh agent run that might give a different answer.
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS research (
 CREATE INDEX IF NOT EXISTS idx_research_started ON research(started_at);
 """
 
-# Pragmatic migration — older deployments don't have metadata_json yet.
+# Pragmatic migration - older deployments don't have metadata_json yet.
 _MIGRATIONS = ("ALTER TABLE research ADD COLUMN metadata_json TEXT",)
 
 
@@ -52,7 +52,7 @@ class ResearchStore:
         with self._conn() as c:
             c.executescript(_SCHEMA)
             for stmt in _MIGRATIONS:
-                # ALTERs are idempotent at the application level — already-
+                # ALTERs are idempotent at the application level - already-
                 # applied migrations raise OperationalError, which is fine.
                 with suppress(sqlite3.OperationalError):
                     c.execute(stmt)
@@ -140,7 +140,7 @@ class ResearchStore:
         }
 
     def recent(self, limit: int = 20) -> list[dict[str, Any]]:
-        """Most recent finished runs — useful for an index page later."""
+        """Most recent finished runs - useful for an index page later."""
         with self._conn() as c:
             rows = c.execute(
                 """
@@ -173,7 +173,7 @@ _store: ResearchStore | None = None
 
 
 def get_store() -> ResearchStore:
-    """Lazy singleton — created on first access."""
+    """Lazy singleton - created on first access."""
     global _store
     if _store is None:
         from matscout.config import get_settings
@@ -185,19 +185,17 @@ def get_store() -> ResearchStore:
 
 
 def set_store(store: ResearchStore | None) -> None:
-    """Test hook — inject a tmp-dir store or reset."""
+    """Test hook - inject a tmp-dir store or reset."""
     global _store
     _store = store
 
 
-# ── Citation helpers ─────────────────────────────────────────────────────────
-
-
+# ---- Citation helpers ----
 def extract_material_ids(snapshot: dict[str, Any]) -> list[str]:
     """Pull every distinct mp-XXX / mvc-XXX referenced in a run.
 
     Looks at tool_call args, tool_result summaries, and the final answer.
-    Preserves order of first appearance — handy when the reader scans the
+    Preserves order of first appearance - handy when the reader scans the
     citation list top-to-bottom.
     """
     seen: dict[str, None] = {}
@@ -235,7 +233,7 @@ def reconstruct_messages_from_snapshot(
     follow-up. The Responses API path runs MCP server-side and doesn't
     accept chat.completions-shaped tool exchanges in its ``input`` list,
     so we serialize the original tool sequence into one synthetic
-    assistant text block — preserves recall of what was called and what
+    assistant text block - preserves recall of what was called and what
     came back, in a form the agent can actually read.
 
     Output shape:
@@ -245,7 +243,7 @@ def reconstruct_messages_from_snapshot(
             {role: 'assistant', content: "Earlier in this session I…"},
         ]
 
-    The synthetic assistant block reads like a memo from past-self —
+    The synthetic assistant block reads like a memo from past-self -
     listing each tool name + (compact) args + summary line, plus the
     original final answer. If the follow-up question needs precise
     values, the agent can simply re-call the tool: the SQLite cache will
@@ -261,7 +259,7 @@ def reconstruct_messages_from_snapshot(
     memo_parts: list[str] = [
         "Earlier in this same research session you (the agent) executed the "
         "tool calls below and produced the final answer at the end. The user "
-        "is now asking a follow-up — assume the user has seen everything below."
+        "is now asking a follow-up; assume the user has seen everything below."
     ]
 
     pending_calls: list[tuple[str, dict[str, Any]]] = []

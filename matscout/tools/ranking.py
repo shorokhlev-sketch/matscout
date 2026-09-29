@@ -1,4 +1,4 @@
-"""pareto_rank — multi-criteria material ranking.
+"""pareto_rank - multi-criteria material ranking.
 
 Given a shortlist of mp-ids and a list of criteria, return a Pareto-
 sorted ranking. Each criterion specifies a property, a target direction
@@ -63,7 +63,7 @@ def pareto_rank(
         if direction == "near" and "target" not in c:
             raise ValueError(f"criterion direction='near' requires a 'target' value: {c}")
 
-    # Fetch all candidate property sheets — cached, so this is cheap on
+    # Fetch all candidate property sheets - cached, so this is cheap on
     # repeat runs of the same shortlist.
     rows: list[tuple[Candidate, dict[str, float]]] = []
     for mid in material_ids:

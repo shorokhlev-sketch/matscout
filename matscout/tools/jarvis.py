@@ -7,8 +7,8 @@ jarvis.nist.gov/optimade/jarvisdft/v1, which is the path we use.
 
 The OPTIMADE endpoint only exposes the structural-attribute subset of
 JARVIS (elements, formula, spacegroup, lattice). It does NOT carry the
-custom JARVIS fields — 2D exfoliation energy, OptB88vdW band gap,
-topological-invariant classification — because those aren't part of
+custom JARVIS fields - 2D exfoliation energy, OptB88vdW band gap,
+topological-invariant classification - because those aren't part of
 the OPTIMADE schema. So the previous fine-grained ``find_2d_materials``
 and ``get_jarvis_topological`` filters degrade to "JARVIS structures
 matching an element pattern". The agent should reach for
@@ -66,8 +66,7 @@ def _optimade_query(optimade_filter: str, page_limit: int) -> dict[str, Any]:
                 "formula": attrs.get("chemical_formula_descriptive")
                 or attrs.get("chemical_formula_reduced"),
                 "elements": attrs.get("elements") or [],
-                "spacegroup": attrs.get("_jarvis_spg_symbol")
-                or attrs.get("space_group_it_number"),
+                "spacegroup": attrs.get("_jarvis_spg_symbol") or attrs.get("space_group_it_number"),
                 "nelements": attrs.get("nelements"),
                 "nsites": attrs.get("nsites"),
                 "jarvis_url": (
@@ -131,7 +130,7 @@ def get_jarvis_topological() -> dict[str, Any]:
 
     The OPTIMADE endpoint doesn't expose the topological-class field
     directly. We return a no-data payload so the agent doesn't waste
-    a tool call here — for actual topological cross-validation, search
+    a tool call here - for actual topological cross-validation, search
     arXiv via find_preprints for the candidate's mp-id + 'topological'.
     """
     return {

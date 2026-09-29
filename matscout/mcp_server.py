@@ -10,7 +10,7 @@ Transports:
   local Claude Desktop / Code use, where the client spawns the server as
   a subprocess and pipes JSON-RPC over stdin/stdout.
 - **SSE / streamable HTTP**: when the FastAPI playground mounts this
-  server, MCP becomes reachable as a URL — Claude Desktop ``url`` field
+  server, MCP becomes reachable as a URL - Claude Desktop ``url`` field
   in mcpServers config can point straight at production without
   installing Python anywhere.
 
@@ -83,14 +83,14 @@ mcp = FastMCP(
 )
 
 # Single source of truth: register whatever's in ALL_TOOLS. Keeps the MCP
-# surface and the OpenAI-agent surface lock-stepped — when we add or drop
+# surface and the OpenAI-agent surface lock-stepped - when we add or drop
 # a tool, both update at once.
 for _fn in ALL_TOOLS:
     mcp.tool()(_fn)
 
 
 def main() -> None:
-    """Console entrypoint — runs FastMCP over stdio."""
+    """Console entrypoint - runs FastMCP over stdio."""
     mcp.run()
 
 

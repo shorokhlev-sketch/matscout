@@ -1,6 +1,6 @@
-"""compare_materials — side-by-side property table for N materials.
+"""compare_materials - side-by-side property table for N materials.
 
-Built on top of get_material — no separate API calls, no separate cache.
+Built on top of get_material - no separate API calls, no separate cache.
 The agent can ask for arbitrary properties; we resolve them by attribute
 access on the Material model, with a sensible default set when omitted.
 """
@@ -12,7 +12,7 @@ from typing import Any
 from matscout.models import ComparisonRow, ComparisonTable, Material
 from matscout.tools.get import get_material
 
-# Properties shown when the caller doesn't specify any — the dimensions a
+# Properties shown when the caller doesn't specify any - the dimensions a
 # materials engineer almost always wants to compare.
 _DEFAULT_PROPERTIES = [
     "band_gap",

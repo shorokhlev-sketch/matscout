@@ -1,4 +1,4 @@
-# matscout — multi-stage build with uv for deterministic deps.
+# matscout: multi-stage build with uv for deterministic deps.
 # Final image runs the FastAPI playground on :8000.
 
 FROM python:3.11-slim AS base
@@ -9,16 +9,16 @@ ENV PYTHONUNBUFFERED=1 \
     UV_LINK_MODE=copy \
     UV_PROJECT_ENVIRONMENT=/app/.venv
 
-# uv comes from its official image — saves us shell-script installs.
+# uv comes from its official image, which saves a shell-script install.
 COPY --from=ghcr.io/astral-sh/uv:0.5.11 /uv /uvx /usr/local/bin/
 
 WORKDIR /app
 
-# ── deps layer (cached as long as pyproject + lock don't change) ─────────────
+# ---- deps layer (cached while pyproject.toml and uv.lock stay the same) ----
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-install-project --extra dev
 
-# ── source ──────────────────────────────────────────────────────────────────
+# ---- source ----
 COPY matscout/  ./matscout/
 COPY web/       ./web/
 COPY README.md  ./
@@ -26,7 +26,7 @@ COPY README.md  ./
 # Install the project itself (entry-point scripts).
 RUN uv sync --frozen --extra dev
 
-# ── runtime ─────────────────────────────────────────────────────────────────
+# ---- runtime ----
 EXPOSE 8000
 ENV PATH="/app/.venv/bin:$PATH"
 

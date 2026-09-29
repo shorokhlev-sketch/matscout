@@ -1,6 +1,6 @@
 """Typed I/O models for matscout.
 
-Every tool input/output crosses Pydantic — this is what MCP clients and the
+Every tool input/output crosses Pydantic - this is what MCP clients and the
 OpenAI agent see (auto-generated JSON schemas), and what the eval suite
 asserts against. Keeping these strict and small is the whole point of
 "narrow surface".
@@ -39,7 +39,7 @@ class Verdict(str, Enum):
 
     def explain(self, e: float | None) -> str:
         if e is None:
-            return "Stability data unavailable — treat as unstable."
+            return "Stability data unavailable; treat as unstable."
         if self is Verdict.STABLE:
             return f"On convex hull (E above hull = {e * 1000:.0f} meV/atom). Synthesizable phase."
         if self is Verdict.METASTABLE:
@@ -48,7 +48,7 @@ class Verdict(str, Enum):
                 "but may decompose under prolonged equilibrium."
             )
         return (
-            f"{e * 1000:.0f} meV/atom above hull — likely not synthesizable as a "
+            f"{e * 1000:.0f} meV/atom above hull; likely not synthesizable as a "
             "single phase; consider as a guideline only."
         )
 
@@ -67,7 +67,7 @@ class CrystalSystem(str, Enum):
 
 
 class Symmetry(BaseModel):
-    """Normalized symmetry block — strips the pymatgen-specific wrapping."""
+    """Normalized symmetry block - strips the pymatgen-specific wrapping."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -77,9 +77,7 @@ class Symmetry(BaseModel):
     point_group: str | None = None
 
 
-# ── Tool I/O models ─────────────────────────────────────────────────────────
-
-
+# ---- Tool I/O models ----
 class SearchFilters(BaseModel):
     """Input shape of search_materials. Validated at the tool boundary."""
 
@@ -140,7 +138,7 @@ class SearchFilters(BaseModel):
 
 
 class Candidate(BaseModel):
-    """Compact row returned in search results. Keep small — these come in lists."""
+    """Compact row returned in search results. Keep small - these come in lists."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -162,7 +160,7 @@ class Candidate(BaseModel):
 
 
 class Material(BaseModel):
-    """Full per-material sheet — superset of Candidate. Returned by get_material."""
+    """Full per-material sheet - superset of Candidate. Returned by get_material."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -189,7 +187,7 @@ class Material(BaseModel):
     uncorrected_energy_per_atom: float | None = None
     is_stable: bool | None = None
 
-    # Mechanical / optical / magnetic — populated when MP has the data.
+    # Mechanical / optical / magnetic - populated when MP has the data.
     bulk_modulus: dict[str, float] | None = None  # {voigt, reuss, vrh}
     shear_modulus: dict[str, float] | None = None
     refractive_index: float | None = Field(default=None, description="n at zero frequency.")
@@ -215,7 +213,7 @@ class ComparisonRow(BaseModel):
 
 
 class ComparisonTable(BaseModel):
-    """Bag returned by compare_materials — ready to render in a UI <table>."""
+    """Bag returned by compare_materials - ready to render in a UI <table>."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -237,9 +235,7 @@ class StabilityReport(BaseModel):
     explanation: str
 
 
-# ── Literature / paper-search models ────────────────────────────────────────
-
-
+# ---- Literature / paper-search models ----
 class Paper(BaseModel):
     """Compact bibliographic record. Designed to fit both Semantic Scholar
     and arXiv-derived rows behind the same shape."""

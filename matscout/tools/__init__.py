@@ -1,8 +1,10 @@
-"""Tool surface — pure functions, single source of truth.
+"""Tool surface - pure functions, single source of truth.
 
-Both `mcp_server.py` (FastMCP @tool decorator) and `agent/runner.py`
-(OpenAI function calling) import from here. No conditional branching
-inside the tools by who's calling — that's the whole architectural point.
+`tool_facades.py` wraps these functions into flat-kwarg facades and
+lists the exposed ones in ``ALL_TOOLS``; `mcp_server.py` registers that
+list. The OpenAI agent reaches the same functions over MCP. No conditional
+branching inside the tools by who's calling - that's the whole
+architectural point.
 """
 
 from __future__ import annotations

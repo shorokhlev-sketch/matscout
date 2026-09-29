@@ -1,4 +1,4 @@
-"""Wikipedia REST — short context lookups for materials, elements, methods.
+"""Wikipedia REST - short context lookups for materials, elements, methods.
 
 Used when the agent needs a one-paragraph plain-language definition
 or some pop-science context that the DFT databases don't carry. For
@@ -6,7 +6,7 @@ example: "what is the Shockley-Queisser limit", "what is a Wadsley-
 Roth phase", "history of silicon photovoltaics".
 
 This is a complement, not a primary research source. The agent should
-quote Wikipedia sparingly — for textbook context and definitions, not
+quote Wikipedia sparingly - for textbook context and definitions, not
 for numerical claims (use MP / JARVIS / arXiv for those).
 """
 
@@ -46,7 +46,7 @@ def get_wikipedia_summary(
     if cached is not None:
         return cached
 
-    # Wikipedia's REST summary endpoint — short, ~3-sentence lead.
+    # Wikipedia's REST summary endpoint - short, ~3-sentence lead.
     safe = httpx.URL(f"https://{lang}.wikipedia.org/api/rest_v1/page/summary/{title}")
     try:
         with httpx.Client(timeout=_HTTP_TIMEOUT, follow_redirects=True) as c:
@@ -88,9 +88,9 @@ def get_wikipedia_summary(
         "available": True,
         "note": (
             "One-paragraph lead from Wikipedia. For textbook definitions and "
-            "historical context only — do NOT quote numerical claims from here "
+            "historical context only. Do NOT quote numerical claims from here "
             "without cross-checking against a primary source (MP, JARVIS, "
-            "CrossRef, arXiv)."
+            "Crossref, arXiv)."
         ),
     }
     cache.put("get_wikipedia_summary", cache_args, result)

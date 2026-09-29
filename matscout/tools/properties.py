@@ -1,4 +1,4 @@
-"""Property-sheet expansions over MP — elastic + electronic.
+"""Property-sheet expansions over MP - elastic + electronic.
 
 These surface MP fields that the canonical Candidate doesn't carry but
 that materials scientists routinely ask about. Both are read-only
@@ -16,7 +16,7 @@ def get_elastic_properties(material_id: str) -> dict[str, Any]:
     """Bulk, shear, Young's modulus + derived numbers for one mp-id.
 
     Pulled from MP's elasticity endpoint. Not every entry has elasticity
-    data — when MP returns nothing, we say so honestly instead of
+    data - when MP returns nothing, we say so honestly instead of
     inventing values.
 
     Returns:
@@ -33,7 +33,7 @@ def get_elastic_properties(material_id: str) -> dict[str, Any]:
         }``
 
     The Vickers hardness uses the Chen et al. 2011 empirical estimate
-    H = 0.92 * (G/B)^1.137 * G^0.708 — give-or-take 30% but useful as
+    H = 0.92 * (G/B)^1.137 * G^0.708 - give-or-take 30% but useful as
     an order-of-magnitude check.
     """
     cache = get_cache()
@@ -48,7 +48,7 @@ def get_elastic_properties(material_id: str) -> dict[str, Any]:
             "material_id": material_id,
             "available": False,
             "interpretation": (
-                "Materials Project has no elasticity data for this entry — "
+                "Materials Project has no elasticity data for this entry: "
                 "the elastic tensor was not computed in the DFT workflow. "
                 "Try a closely related mp-id, or compute it externally with "
                 "VASP / Quantum ESPRESSO using the structure from get_structure."
@@ -124,7 +124,7 @@ def get_elastic_properties(material_id: str) -> dict[str, Any]:
 def get_electronic_summary(material_id: str) -> dict[str, Any]:
     """Electronic-structure summary: gap, direct/indirect, magnetic ordering.
 
-    Lightweight lookup — does NOT fetch the full DOS / band-structure
+    Lightweight lookup - does NOT fetch the full DOS / band-structure
     arrays (those are megabyte-scale). Returns the metadata an agent
     needs to characterise a material electronically.
 
@@ -149,7 +149,7 @@ def get_electronic_summary(material_id: str) -> dict[str, Any]:
         return cached
 
     client = get_client()
-    # The summary endpoint already carries the key electronic fields —
+    # The summary endpoint already carries the key electronic fields -
     # cheaper than electronic_structure, with the same level of detail
     # for our purposes.
     docs = list(
@@ -201,11 +201,11 @@ def get_electronic_summary(material_id: str) -> dict[str, Any]:
     elif bg < 0.05:
         electronic = "Metallic (Fermi level inside a band)."
     elif bg < 1.0:
-        electronic = "Narrow-gap semiconductor — thermoelectric / IR-detector regime."
+        electronic = "Narrow-gap semiconductor: thermoelectric / IR-detector regime."
     elif bg < 2.5:
-        electronic = "Mid-gap semiconductor — photovoltaic / LED active layer regime."
+        electronic = "Mid-gap semiconductor: photovoltaic / LED active layer regime."
     else:
-        electronic = "Wide-gap semiconductor / insulator — UV optoelectronics / dielectric."
+        electronic = "Wide-gap semiconductor / insulator: UV optoelectronics / dielectric."
 
     if is_mag:
         electronic += f" Magnetic ordering: {ordering or '?'}."

@@ -1,4 +1,4 @@
-"""search_materials — typed filter → list[Candidate], with cache.
+"""search_materials - typed filter → list[Candidate], with cache.
 
 This is the only place that translates our SearchFilters dialect into
 mp-api kwargs. mcp_server and the agent both call the same function;
@@ -12,7 +12,7 @@ from typing import Any
 from matscout.models import Candidate, SearchFilters, Symmetry
 from matscout.tools._client import get_cache, get_client
 
-# Compact list of fields requested from MP — we keep this lean to avoid
+# Compact list of fields requested from MP - we keep this lean to avoid
 # pulling huge structures into list responses. Full sheet is in get_material.
 _LIST_FIELDS = [
     "material_id",
@@ -45,7 +45,7 @@ def _filters_to_mp_kwargs(f: SearchFilters) -> dict[str, Any]:
     if f.max_energy_above_hull is not None:
         kw["energy_above_hull"] = (0.0, f.max_energy_above_hull)
     if f.only_stable:
-        # The MP API has a direct `is_stable` filter — prefer it over
+        # The MP API has a direct `is_stable` filter - prefer it over
         # tweaking energy_above_hull bounds ourselves.
         kw["is_stable"] = True
     if f.num_elements is not None:

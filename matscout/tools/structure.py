@@ -1,4 +1,4 @@
-"""Structure export — CIF / POSCAR / XYZ for downstream DFT work.
+"""Structure export - CIF / POSCAR / XYZ for downstream DFT work.
 
 These tools take an mp-id, fetch the canonical structure from MP, and
 return it as a text blob in whatever format the user's calculator
@@ -43,7 +43,7 @@ def get_structure(
 
     Args:
         material_id: MP id (e.g. ``"mp-149"``).
-        fmt: one of ``"cif"`` (default — Quantum ESPRESSO / GPAW / OVITO),
+        fmt: one of ``"cif"`` (default - Quantum ESPRESSO / GPAW / OVITO),
              ``"poscar"`` (VASP), ``"xyz"`` (visualization, loses periodicity).
 
     Returns:

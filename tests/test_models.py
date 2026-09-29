@@ -1,4 +1,4 @@
-"""Invariants for the Pydantic models — these are the agent's API surface."""
+"""Invariants for the Pydantic models - these are the agent's API surface."""
 
 from __future__ import annotations
 
@@ -17,9 +17,8 @@ from matscout.models import (
     Verdict,
 )
 
-# ── Verdict thresholds ───────────────────────────────────────────────────────
 
-
+# ---- Verdict thresholds ----
 @pytest.mark.parametrize(
     "e, expected",
     [
@@ -47,9 +46,7 @@ def test_verdict_unknown_when_no_data() -> None:
     assert "unavailable" in v.explain(None).lower()
 
 
-# ── SearchFilters validation ─────────────────────────────────────────────────
-
-
+# ---- SearchFilters validation ----
 def test_search_filters_normalises_elements() -> None:
     f = SearchFilters(elements=["si", "  o "])
     assert f.elements == ["Si", "O"]
@@ -74,9 +71,7 @@ def test_search_filters_extra_keys_forbidden() -> None:
         SearchFilters(unknown_field=123)  # type: ignore[call-arg]
 
 
-# ── Candidate / Material ─────────────────────────────────────────────────────
-
-
+# ---- Candidate / Material ----
 def test_candidate_minimal() -> None:
     c = Candidate(
         material_id="mp-149",
@@ -120,9 +115,7 @@ def test_material_full_inflate_and_dump() -> None:
     assert d["material_id"] == "mp-149"
 
 
-# ── Symmetry ─────────────────────────────────────────────────────────────────
-
-
+# ---- Symmetry ----
 def test_symmetry_rejects_invalid_spacegroup() -> None:
     with pytest.raises(ValidationError):
         Symmetry(spacegroup_number=231)
@@ -130,9 +123,7 @@ def test_symmetry_rejects_invalid_spacegroup() -> None:
         Symmetry(spacegroup_number=0)
 
 
-# ── ComparisonTable ──────────────────────────────────────────────────────────
-
-
+# ---- ComparisonTable ----
 def test_comparison_table_roundtrip() -> None:
     t = ComparisonTable(
         properties=["band_gap", "density"],
@@ -155,9 +146,7 @@ def test_comparison_table_roundtrip() -> None:
     assert again == t
 
 
-# ── StabilityReport ──────────────────────────────────────────────────────────
-
-
+# ---- StabilityReport ----
 def test_stability_report_explains_metastable() -> None:
     r = StabilityReport(
         material_id="mp-x",

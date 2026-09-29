@@ -41,7 +41,7 @@ CREATE INDEX IF NOT EXISTS idx_tool_created ON tool_cache(tool_name, created_at)
 
 
 def _canonical_args(args: dict[str, Any]) -> str:
-    """Stable JSON serialization — same args in any key order → same string."""
+    """Stable JSON serialization - same args in any key order → same string."""
     return json.dumps(args, sort_keys=True, separators=(",", ":"), default=str)
 
 
@@ -78,8 +78,7 @@ class Cache:
         finally:
             conn.close()
 
-    # ── public API ──────────────────────────────────────────────────────────
-
+    # ---- public API ----
     def get(self, tool_name: str, args: dict[str, Any]) -> dict[str, Any] | None:
         """Returns cached result or None if missing / expired."""
         key = _hash(tool_name, args)
@@ -93,7 +92,7 @@ class Cache:
                 return None
             result_json, created_at = row
             if now - created_at > self.ttl_seconds:
-                # Stale — let it be pruned later by vacuum(), don't return it.
+                # Stale - let it be pruned later by vacuum(), don't return it.
                 return None
             c.execute(
                 "UPDATE tool_cache SET hit_count = hit_count + 1 WHERE cache_key = ?",

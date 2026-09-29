@@ -1,4 +1,4 @@
-"""Application-aware search wrappers — pre-tuned filters for common asks.
+"""Application-aware search wrappers - pre-tuned filters for common asks.
 
 Each combinator runs a small set of CHEMSYS-specific searches (not
 a single "contains X" filter), so the results are the chemistries that
@@ -6,14 +6,14 @@ actually appear in real electrodes / absorbers / TE materials rather
 than every Li-containing phosphate that MP knows about. Results are
 merged + de-duplicated + ranked.
 
-References — what each shortlist is anchored on:
+References - what each shortlist is anchored on:
   - Battery anodes / cathodes: Whittingham 2004 *Chem. Rev.* + Park
     2010 *J. Power Sources* anode review + LiBES handbook.
   - Solar absorbers: Shockley-Queisser 1961 + Cd-free PV guidance.
   - Thermoelectric: Snyder & Toberer 2008 *Nat. Mater.* + Zhao 2014
     SnSe report. Anchored on heavy-chalcogen / heavy-pnictide families.
   - Transparent conductor: Hosono 2007 *Thin Solid Films* TCO review
-    — wide-gap oxides with known dopant-induced conductivity.
+    - wide-gap oxides with known dopant-induced conductivity.
 """
 
 from __future__ import annotations
@@ -23,11 +23,10 @@ from typing import Literal
 from matscout.models import Candidate, SearchFilters
 from matscout.tools.search import search_materials
 
-# ── Battery electrodes ─────────────────────────────────────────────────────
-
+# ---- Battery electrodes ----
 # Per-ion: list of (chemsys-or-formula, label) probes. `formula` runs
 # a pure-element search; multi-element strings become elements=[…]
-# (conjunctive — "contains all", because that's how MP works).
+# (conjunctive - "contains all", because that's how MP works).
 _ANODE_PROBES: dict[str, list[tuple[str, str]]] = {
     "lithium": [
         ("C", "graphite + carbon anodes"),
@@ -61,7 +60,7 @@ _ANODE_PROBES: dict[str, list[tuple[str, str]]] = {
     ],
 }
 
-# Cathode families per ion — anchored on real production / R&D materials.
+# Cathode families per ion - anchored on real production / R&D materials.
 _CATHODE_PROBES: dict[str, list[tuple[str, str]]] = {
     "lithium": [
         ("Li-Co-O", "LiCoO2 (LCO)"),
@@ -87,7 +86,7 @@ _CATHODE_PROBES: dict[str, list[tuple[str, str]]] = {
     ],
 }
 
-# Common solid-state Li-ion electrolytes — explicitly EXCLUDED from the
+# Common solid-state Li-ion electrolytes - explicitly EXCLUDED from the
 # anode probe so a query for "anode" doesn't surface LiPON / garnet /
 # LATP / LISICON. (Each line is a chemsys prefix substring match.)
 _ELECTROLYTE_FAMILIES = (
@@ -144,9 +143,7 @@ def _dedup_rank(
     return ranked[:limit]
 
 
-# ── Public combinators ─────────────────────────────────────────────────────
-
-
+# ---- Public combinators ----
 def find_battery_anode(
     chemistry: Literal["lithium", "sodium", "magnesium", "potassium"] = "lithium",
     limit: int = 10,
@@ -188,7 +185,7 @@ def find_solar_absorber(
     """Single-junction absorbers near the Shockley-Queisser optimum.
 
     Band gap 1.1-1.7 eV, stable, optionally non-toxic / direct-gap.
-    Single broad MP search — solar absorbers are a band-gap question
+    Single broad MP search - solar absorbers are a band-gap question
     more than a chemistry question (Si, CIGS, CZTS, perovskites all
     co-exist in this gap window), so we don't bias the chemsys.
     """

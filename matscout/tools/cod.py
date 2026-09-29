@@ -1,19 +1,18 @@
-"""COD — Crystallography Open Database, experimental crystal structures.
+"""COD - Crystallography Open Database, experimental crystal structures.
 
 COD (https://www.crystallography.net/cod/) is a ~500K-entry open
 collection of EXPERIMENTAL inorganic + organic + organometallic
 crystal structures, refined from single-crystal or powder X-ray /
-neutron diffraction. Unlike MP / AFLOW / JARVIS — which describe
-relaxed structures from DFT — COD is ground-truth from the lab.
+neutron diffraction. Unlike MP / AFLOW / JARVIS - which describe
+relaxed structures from DFT - COD is ground-truth from the lab.
 
 This makes it the right cross-source check when:
   - DFT predicts a phase that isn't observed experimentally
   - You want to compare a calculated lattice constant against a real one
   - The user asks "has this been synthesized?"
 
-We hit COD via its OPTIMADE endpoint (same protocol matscout uses for
-the federation tool) plus a fallback to its REST search for keyword
-matches that OPTIMADE's element-filter doesn't cover well.
+We hit COD via its OPTIMADE endpoint only (same protocol matscout uses
+for the federation tool). There is no REST-search fallback.
 """
 
 from __future__ import annotations

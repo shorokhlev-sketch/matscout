@@ -1,4 +1,4 @@
-"""check_stability — verdict + human explanation for a single material."""
+"""check_stability - verdict + human explanation for a single material."""
 
 from __future__ import annotations
 
