@@ -1,15 +1,15 @@
 """OpenAI Responses API agent loop for matscout, backed by remote MCP.
 
 The agent receives a natural-language query and runs through gpt-4o via the
-Responses API. The 10 typed tools are not handed to OpenAI as JSON-schemas
-here — instead, OpenAI connects to our hosted MCP server (the same one
-mounted on this uvicorn process at ``/mcp/http/``) and discovers them via
-``tools/list``. Every tool call OpenAI decides to make is then dispatched
-over HTTP back to our MCP server, which executes the underlying Python
-function and returns the result. This makes the "MCP server" claim
-verifiable from the browser: a recruiter watching DevTools will see HTTP
-hits from OpenAI's egress to ``matscout.prfo.design/mcp/http/`` on every
-query, not a synthetic loop inside our Python.
+Responses API. The 25 typed tools (``ALL_TOOLS`` in ``tool_facades.py``)
+are not handed to OpenAI as JSON-schemas here. Instead, OpenAI connects to
+our hosted MCP server (the same one mounted on this uvicorn process at
+``/mcp/http/``) and discovers them via ``tools/list``. Every tool call
+OpenAI decides to make is then dispatched over HTTP back to our MCP server,
+which executes the underlying Python function and returns the result. The
+MCP path is the production path: every query from the web playground
+produces HTTP hits from OpenAI's egress to ``DEFAULT_MCP_SERVER_URL``,
+not a synthetic loop inside our Python.
 
 Self-correction stays prompt-driven (see ``agent/prompts.py``).
 """
@@ -40,9 +40,9 @@ DEFAULT_MODEL = "gpt-4o"
 DEFAULT_MCP_SERVER_URL = "https://matscout.prfo.design/mcp/http/"
 DEFAULT_MCP_SERVER_LABEL = "matscout"
 
-# ── Two-phase agent: tool allowlists per phase ──────────────────────────────
+# --- Two-phase agent: tool allowlists per phase ---
 #
-# Stage 1 (Discovery) only has tools that produce candidate sets — fast,
+# Stage 1 (Discovery) only has tools that produce candidate sets - fast,
 # broad, no expensive drilling. Forces the model to STOP after finding
 # candidates instead of trying to compose the final answer in one breath.
 # Stage 2 (Analysis) has the wider toolkit and writes the final markdown.
@@ -233,7 +233,7 @@ def _diff_for_adaptation(prev: dict[str, Any], curr: dict[str, Any]) -> str | No
     if isinstance(pmh, int | float) and isinstance(cmh, int | float) and cmh > pmh:
         return f"raising the energy_above_hull cap from {pmh} to {cmh} eV/atom."
 
-    # limit lowered (tightening) — heuristic for >50 hit case
+    # limit lowered (tightening) - heuristic for >50 hit case
     pl = prev.get("limit")
     cl = curr.get("limit")
     if isinstance(pl, int) and isinstance(cl, int) and cl < pl // 2:
@@ -326,11 +326,11 @@ def stream_agent(
         )
         return
 
-    # ── Phase 1: Discovery ────────────────────────────────────────
+    # --- Phase 1: Discovery ---
     yield TraceEvent(
         kind="phase",
         turn=1,
-        content="🔍 Discovery — finding candidate materials",
+        content="Discovery: finding candidate materials",
     )
 
     stage1_text = ""
@@ -349,17 +349,17 @@ def stream_agent(
         if ev.kind == "final":
             stage1_text = ev.content or ""
             stage1_response_id = ev.response_id
-            # DON'T forward this 'final' — it's the discovery summary,
+            # DON'T forward this 'final' - it's the discovery summary,
             # not the user-facing answer. The actual final comes from
             # Phase 2 below.
         else:
             yield ev
 
-    # ── Phase 2: Analysis ─────────────────────────────────────────
+    # --- Phase 2: Analysis ---
     yield TraceEvent(
         kind="phase",
         turn=2,
-        content="📊 Analysis — drilling in, ranking, composing answer",
+        content="Analysis: drilling in, ranking, composing answer",
     )
 
     analysis_input = (
@@ -401,14 +401,14 @@ def _stream_phase(
     """One Responses API call, streaming events. Internal helper for ``stream_agent``.
 
     ``allowed_tool_names`` is forwarded to the MCP tool spec as
-    ``allowed_tools`` — restricts the model to a subset of the 21 tools
+    ``allowed_tools`` - restricts the model to a subset of the 25 tools
     on our MCP server. None = all tools allowed.
 
     Conversation continuation has two modes:
 
-    1. ``previous_response_id`` — OpenAI server-side state, the preferred
+    1. ``previous_response_id`` - OpenAI server-side state, the preferred
        path for live multi-turn conversations.
-    2. ``prior_messages`` — legacy in-process state, used when resuming
+    2. ``prior_messages`` - legacy in-process state, used when resuming
        from a /r/{id} snapshot whose previous_response_id is no longer
        valid.
     """
@@ -416,10 +416,10 @@ def _stream_phase(
     # plain string (simplest), or a list of message-like items (richer).
     input_payload: Any
     if prior_messages:
-        # Snapshot resume — flatten reconstructed messages into Responses
+        # Snapshot resume - flatten reconstructed messages into Responses
         # input items. Tool exchanges from chat.completions don't map
         # cleanly to Responses items, so we collapse everything to text
-        # role messages — the agent loses fine-grained turn structure but
+        # role messages - the agent loses fine-grained turn structure but
         # keeps the conversational gist.
         items: list[dict[str, Any]] = []
         for m in prior_messages:
@@ -436,7 +436,7 @@ def _stream_phase(
         input_payload = query
 
     # OpenAI SDK's typed Iterable[FunctionToolParam | ...] doesn't yet
-    # include the "mcp" tool variant in its public TypedDict union — the
+    # include the "mcp" tool variant in its public TypedDict union - the
     # SDK still accepts it at runtime, so we silence the type checker
     # with a cast rather than redefining the upstream type.
     mcp_tool_spec: dict[str, Any] = {
@@ -458,12 +458,12 @@ def _stream_phase(
         content=f"Planning next step (via MCP, phase={phase_label})…",
     )
 
-    # Recent tool-call history — used to detect "the model just retried
+    # Recent tool-call history - used to detect "the model just retried
     # the same tool with widened args", which deserves an adaptation
     # event even when the model didn't write a narration itself.
     recent_calls: list[tuple[str, dict[str, Any]]] = []
 
-    # ── Streaming pass ───────────────────────────────────────────────
+    # --- Streaming pass ---
     #
     # We translate OpenAI Responses stream events to our TraceEvent shape
     # in real time. Three pieces of state worth knowing about:
@@ -476,11 +476,11 @@ def _stream_phase(
     #
     # 2. ``message_texts`` accumulates per-output_index text fragments.
     #    Responses can produce several `message` items in a single
-    #    response — intermediate ones are narrations between tool calls
+    #    response - intermediate ones are narrations between tool calls
     #    (the system prompt instructs the model to do this), the very
     #    last one is the final answer. We don't know during streaming
     #    which message is the last, so we use one-message lookahead
-    #    (``held_message_idx``) — a finished message is held until the
+    #    (``held_message_idx``) - a finished message is held until the
     #    NEXT activity (another item.added, another item.done, or
     #    response.completed) confirms whether it was narration or final.
     #
@@ -488,7 +488,7 @@ def _stream_phase(
     #    event can carry it back for conversation continuation.
     pending_calls: dict[int, dict[str, Any]] = {}
     message_texts: dict[int, str] = {}
-    # Track which message indices we've already emitted as narration —
+    # Track which message indices we've already emitted as narration -
     # at response.completed we must NOT recycle them as the final
     # answer, otherwise a model that wrote narration + tool calls but
     # forgot to compose a real synthesis ends up with the narration
@@ -549,7 +549,7 @@ def _stream_phase(
 
         elif etype == "response.output_item.added":
             # New output item starting. If we were holding a previous
-            # message item, it's now confirmed intermediate — flush it
+            # message item, it's now confirmed intermediate - flush it
             # as narration before processing the new item.
             yield from _flush_held_as_narration()
             item = getattr(event, "item", None)
@@ -560,7 +560,7 @@ def _stream_phase(
             if it_type == "mcp_call":
                 name = getattr(item, "name", "?")
                 pending_calls[idx] = {"name": name, "args_json": ""}
-                # Don't emit tool_call here — args aren't ready yet.
+                # Don't emit tool_call here - args aren't ready yet.
                 # We'll emit on mcp_call_arguments.done with full args.
 
         elif etype == "response.mcp_call_arguments.delta":
@@ -570,7 +570,7 @@ def _stream_phase(
                 pending_calls[idx]["args_json"] += delta
 
         elif etype == "response.mcp_call_arguments.done":
-            # Args fully streamed — NOW we can emit a populated tool_call
+            # Args fully streamed - NOW we can emit a populated tool_call
             # event. This is the moment the call is actually dispatched
             # to the MCP server.
             idx = getattr(event, "output_index", None)
@@ -585,7 +585,7 @@ def _stream_phase(
                 name = pending["name"]
 
                 # Either flush the model's own narration (if it wrote
-                # one before this call) — or, when the model went
+                # one before this call) - or, when the model went
                 # straight to a tool, synthesize a deterministic
                 # narration from the tool name + args. Either way the
                 # human sees a sentence per agent decision.
@@ -639,7 +639,7 @@ def _stream_phase(
                         kind="tool_result", name=name, args=args_obj, result=result_obj
                     )
             elif it_type == "message":
-                # Finished message — hold it; if another item follows
+                # Finished message - hold it; if another item follows
                 # (or response.completed says it was the last), we'll
                 # then classify it as narration or final.
                 yield from _flush_held_as_narration()
@@ -647,7 +647,7 @@ def _stream_phase(
 
         elif etype == "response.completed":
             # End of stream. The final answer is the last *unflushed*
-            # message — anything we already shipped as a reasoning event
+            # message - anything we already shipped as a reasoning event
             # must NOT be recycled as the final, otherwise an agent that
             # wrote narration + tools but forgot to compose a real
             # synthesis echoes the narration in the answer area.
@@ -667,12 +667,12 @@ def _stream_phase(
                 # "final" with an honest note about the glitch.
                 yield TraceEvent(kind="reasoning", content=final_text)
                 final_text = (
-                    "The agent ended its turn after planning without calling any tools "
-                    "— this is a rare model glitch. Please rerun the same query."
+                    "The agent ended its turn after planning without calling any tools. "
+                    "This is a rare model glitch. Please rerun the same query."
                 )
             elif recent_calls and not final_text:
                 # Model called tools but never composed a synthesis
-                # message — happens when it gets confused and stops
+                # message - happens when it gets confused and stops
                 # short. Don't lie that the narration was the answer;
                 # tell the user honestly and point at the trace.
                 tool_summary = ", ".join(f"`{name}`" for name, _ in recent_calls[-5:])

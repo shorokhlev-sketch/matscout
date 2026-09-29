@@ -26,7 +26,7 @@ html, body {
   color: var(--fg);
   font-family: var(--sans);
   font-size: 14px;
-  font-feature-settings: 'tnum' 1, 'cv11' 1;
+  font-feature-settings: 'cv11' 1;
   -webkit-font-smoothing: antialiased;
   height: 100%;
 }
@@ -83,7 +83,7 @@ header.top .meta a {
   border-bottom: 1px dashed var(--border-hi);
 }
 
-/* Locale switch — sits between the tag and the meta block, auto-pushed left */
+/* Locale switch - sits between the tag and the meta block, auto-pushed left */
 .locale-switch {
   margin-left: auto;
   display: inline-flex;
@@ -166,10 +166,13 @@ label.q-label--followup {
   color: var(--acc);
 }
 label.q-label--followup::before {
-  content: '◆';
+  content: '';
   display: inline-block;
-  margin-right: 6px;
-  font-size: 9px;
+  width: 6px;
+  height: 6px;
+  margin-right: 8px;
+  background: currentColor;
+  transform: rotate(45deg);
   vertical-align: 1px;
 }
 textarea#q {
@@ -287,7 +290,7 @@ button.ghost { background: transparent; color: var(--fg-3); }
 .ev.tool_error    { border-left-color: var(--err); }
 .ev.tool_error .badge  { color: var(--err); }
 
-/* Agent narration — short between-tool sentences. Softer than tool_call,
+/* Agent narration - short between-tool sentences. Softer than tool_call,
    meant to read as "thinking out loud." Italics + serif for contrast
    with the mono tool/result rows. */
 .ev.reasoning {
@@ -309,10 +312,9 @@ button.ghost { background: transparent; color: var(--fg-3); }
   font-weight: 500;
   text-transform: lowercase;
 }
-.ev.reasoning .badge::before { content: '💭 '; font-style: normal; }
 .ev.reasoning .detail { color: var(--fg); word-break: break-word; }
 
-/* Self-correction marker — amber, with the rotation glyph. Lands when
+/* Self-correction marker - amber label and tinted row. Lands when
    the agent widens a filter or drops a constraint after 0 hits / too
    many hits. */
 .ev.adaptation {
@@ -338,19 +340,25 @@ button.ghost { background: transparent; color: var(--fg-3); }
 }
 .ev.adaptation .detail { color: var(--fg); word-break: break-word; }
 .ev .name { color: var(--fg); font-weight: 600; }
-.ev .kv { color: var(--fg-3); margin-right: 6px; }
+.ev .kv { color: var(--fg-3); }
 .ev .kv .k { color: var(--fg-2); }
 .ev .kv .v { color: var(--fg); }
 
-/* Live event — animated bar on the left edge + ticking timestamp */
+/* Live event - animated bar on the left edge + ticking timestamp */
 .ev.live {
   background: linear-gradient(90deg, var(--acc-soft) 0%, transparent 60%);
 }
 .ev.live .ts::after {
-  content: ' ⟳';
+  content: '';
   display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-left: 5px;
+  border: 1.5px solid var(--acc);
+  border-top-color: transparent;
+  border-radius: 50%;
   animation: spin 1.4s linear infinite;
-  color: var(--acc);
+  vertical-align: -1px;
 }
 @keyframes spin {
   from { transform: rotate(0); } to { transform: rotate(360deg); }
@@ -362,9 +370,20 @@ button.ghost { background: transparent; color: var(--fg-3); }
   color: var(--fg-3);
   margin-left: 10px;
   letter-spacing: 0.04em;
+  /* The parent h2 is uppercase; keep units such as "12s" lowercase. */
+  text-transform: none;
 }
 .elapsed.live { color: var(--acc); }
-.elapsed.live::before { content: '● '; }
+.elapsed.live::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  vertical-align: 1px;
+}
 
 /* Answer-row toolbar (share button) */
 .row-h2 {
@@ -406,7 +425,7 @@ button.ghost { background: transparent; color: var(--fg-3); }
   font-size: 10.5px;
 }
 
-/* Snapshot banner — shown when viewing /r/{id} */
+/* Snapshot banner - shown when viewing /r/{id} */
 .snapshot-banner {
   font-family: var(--mono);
   font-size: 11px;
@@ -464,7 +483,7 @@ button.ghost { background: transparent; color: var(--fg-3); }
   color: var(--acc);
   border-color: var(--acc);
 }
-/* 3D-view chip — same visual weight as the CIF chip but distinct hover */
+/* 3D-view chip - same visual weight as the CIF chip but distinct hover */
 #answer .view-link {
   font-family: var(--mono);
   font-size: 0.7em;
@@ -483,7 +502,7 @@ button.ghost { background: transparent; color: var(--fg-3); }
 #answer .view-link:disabled { opacity: 0.5; cursor: progress; }
 #answer .crystal-viewer canvas { border-radius: var(--rad-lg); }
 
-/* Default desktop sizing for the inline 3D crystal viewer — was inline-
+/* Default desktop sizing for the inline 3D crystal viewer - was inline-
    styled in JS, moved here so the mobile media query can override
    width / height without an !important arms race. */
 .crystal-viewer {
@@ -518,7 +537,7 @@ svg.phase-diagram .pt.metastable { fill: none; stroke: var(--fg-3); stroke-width
 svg.phase-diagram .pt:hover      { stroke: var(--acc-2); stroke-width: 1.6; }
 svg.phase-diagram .axis-label    { fill: var(--fg-3); font-size: 9.5px; font-family: var(--sans); text-anchor: middle; }
 svg.phase-diagram .tick-label    { fill: var(--fg-4); font-size: 9px; font-family: var(--mono); text-anchor: end; }
-svg.phase-diagram .chart-title   { fill: var(--fg-2); font-size: 9.5px; letter-spacing: 0.06em; font-family: var(--mono); text-transform: uppercase; }
+svg.phase-diagram .chart-title   { fill: var(--fg-2); font-size: 9.5px; letter-spacing: 0.06em; font-family: var(--mono); }
 svg.phase-diagram .legend-label  { fill: var(--fg-3); font-size: 9px; font-family: var(--mono); }
 svg.phase-diagram .tick-label-left  { fill: var(--fg-2); font-size: 10px; font-family: var(--mono); text-anchor: start; }
 svg.phase-diagram .tick-label-right { fill: var(--fg-2); font-size: 10px; font-family: var(--mono); text-anchor: end; }
@@ -554,13 +573,18 @@ svg.phase-diagram .tern-vertex-right  { fill: var(--acc); font-size: 13px; font-
   padding: 0;
   margin: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  /* Wide enough for "mp-1314210 · materialsproject.org" on one line. */
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
   gap: 6px 14px;
 }
 .references-block li {
   font-family: var(--mono);
   font-size: 11px;
   color: var(--fg-3);
+  /* One line per entry, so the separator never dangles at a line end. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .references-block li a {
   color: var(--fg);
@@ -577,7 +601,7 @@ svg.phase-diagram .tern-vertex-right  { fill: var(--acc); font-size: 13px; font-
   color: var(--fg-4);
 }
 
-/* Provenance block — sits below references, same visual weight, tabular layout */
+/* Provenance block - sits below references, same visual weight, tabular layout */
 .provenance-block {
   margin-top: 14px;
   padding: 14px 18px;
@@ -621,9 +645,15 @@ svg.phase-diagram .tern-vertex-right  { fill: var(--acc); font-size: 13px; font-
   font-size: 14px;
   line-height: 1.6;
   color: var(--fg);
-  white-space: pre-wrap;
+  /* marked emits a newline between block tags; pre-wrap rendered each one
+     as an empty line, so lists and paragraphs sat far apart. */
+  white-space: normal;
   min-height: 80px;
 }
+#answer > :first-child { margin-top: 0; }
+#answer > :last-child { margin-bottom: 0; }
+#answer p { margin: 0 0 10px; }
+#answer pre { white-space: pre-wrap; }
 #answer:empty::before {
   content: attr(data-empty-msg);
   color: var(--fg-4);
@@ -664,8 +694,10 @@ svg.phase-diagram .tern-vertex-right  { fill: var(--acc); font-size: 13px; font-
   color: var(--fg-3);
   font-weight: 500;
 }
-#answer ul, #answer ol { padding-left: 22px; }
+#answer ul, #answer ol { padding-left: 22px; margin: 6px 0 10px; }
 #answer li { margin: 3px 0; }
+#answer li > p { margin: 0; }
+#answer li > ul, #answer li > ol { margin: 2px 0; }
 
 .status {
   font-size: 10.5px;
@@ -674,18 +706,31 @@ svg.phase-diagram .tern-vertex-right  { fill: var(--acc); font-size: 13px; font-
   margin-top: 14px;
   letter-spacing: 0.03em;
 }
-.status.live::before {
-  content: '●';
-  color: var(--acc);
+.status.live::before,
+.status.done::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
   margin-right: 6px;
+  vertical-align: 1px;
+}
+.status.live::before {
+  background: var(--acc);
   animation: pulse 1.4s infinite;
 }
-.status.done::before {
-  content: '●';
-  color: var(--ok);
-  margin-right: 6px;
-}
+.status.done::before { background: var(--ok); }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+/* Tabular figures only where digits must line up. Inter's tabular hyphen
+   is wider than a letter, so enabling tnum on all text spaces out every
+   hyphen ("mp - 149"). */
+#answer td,
+.elapsed,
+.status,
+.provenance-block dd,
+svg.phase-diagram .tick-label { font-variant-numeric: tabular-nums; }
 
 footer {
   padding: 12px 22px;
@@ -697,7 +742,7 @@ footer {
 }
 footer a { color: var(--fg-2); text-decoration: none; border-bottom: 1px dashed var(--border-hi); }
 
-/* ── follow-up turns in the same conversation ───────────────────────────── */
+/* --- follow-up turns in the same conversation --- */
 .turn-divider {
   display: flex;
   align-items: center;
@@ -733,6 +778,19 @@ footer a { color: var(--fg-2); text-decoration: none; border-bottom: 1px dashed 
   white-space: nowrap;
 }
 
+/* Stored question on a /r/{id} permalink: turn-divider look, full text. */
+.snapshot-question { margin: 0 0 14px; align-items: baseline; }
+.snapshot-question .label { flex: 0 0 auto; }
+.snapshot-question .q {
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--fg);
+  max-width: none;
+  white-space: normal;
+  overflow: visible;
+}
+
 .prior-answer {
   margin: 0 0 18px;
   padding: 12px 14px 4px;
@@ -742,7 +800,7 @@ footer a { color: var(--fg-2); text-decoration: none; border-bottom: 1px dashed 
   position: relative;
 }
 .prior-answer::before {
-  content: 'Previous turn';
+  content: attr(data-label);
   display: block;
   font-family: var(--mono);
   font-size: 10px;
@@ -752,7 +810,7 @@ footer a { color: var(--fg-2); text-decoration: none; border-bottom: 1px dashed 
   margin-bottom: 8px;
 }
 
-/* ── header .meta button (looks like a link) ────────────────────────────── */
+/* --- header .meta button (looks like a link) --- */
 .meta-link {
   background: none;
   border: none;
@@ -766,7 +824,7 @@ footer a { color: var(--fg-2); text-decoration: none; border-bottom: 1px dashed 
 }
 .meta-link:hover { color: var(--acc); border-bottom-color: var(--acc); }
 
-/* ── "Use as MCP" modal ─────────────────────────────────────────────────── */
+/* --- "Use as MCP" modal --- */
 .mcp-modal {
   position: fixed; inset: 0;
   background: rgba(0, 0, 0, 0.68);
@@ -834,6 +892,13 @@ footer a { color: var(--fg-2); text-decoration: none; border-bottom: 1px dashed 
   font-size: 11px;
   color: var(--fg-3);
 }
+.mcp-modal__card a {
+  color: var(--fg-2);
+  text-decoration: none;
+  border-bottom: 1px dashed var(--border-hi);
+  transition: color 0.15s ease;
+}
+.mcp-modal__card a:hover { color: var(--acc); border-bottom-color: var(--acc); }
 .mcp-modal__copy {
   background: var(--acc);
   color: var(--bg);
@@ -849,7 +914,7 @@ footer a { color: var(--fg-2); text-decoration: none; border-bottom: 1px dashed 
 }
 .mcp-modal__copy:hover { opacity: 0.85; }
 
-/* ── Phase divider — major workflow boundary (Discovery → Analysis) ──── */
+/* --- Phase divider - major workflow boundary (Discovery to Analysis) --- */
 .ev.phase {
   margin: 18px 0 8px;
   padding: 10px 14px;
@@ -869,7 +934,7 @@ footer a { color: var(--fg-2); text-decoration: none; border-bottom: 1px dashed 
 }
 .ev.phase .ts { color: var(--fg-3); }
 
-/* ── Inline CIF preview (toggled by ⬇ CIF chip) ───────────────────────── */
+/* --- Inline CIF preview (toggled by the CIF chip) --- */
 .cif-preview {
   display: block;
   margin: 8px 0 12px;
@@ -923,12 +988,12 @@ button.cif-link.on, button.view-link.on {
   color: var(--acc);
 }
 
-/* ── Mobile (≤ 900px) — chat-style layout ─────────────────────────────────
+/* --- Mobile (<= 900px) - chat-style layout ---
  *
  * The desktop two-column grid (input | trace+answer) collapses on mobile
  * into a familiar messenger pattern: input pinned to the bottom of the
- * viewport, conversation (Trace → Answer → Examples) scrolling above it.
- * The previous "two-column → one-column stack" mode produced a single
+ * viewport, conversation (Trace, Answer, Examples) scrolling above it.
+ * The previous "two-column to one-column stack" mode produced a single
  * very long page that the user described as "uncomfortable, undivided
  * vertical scroll".
  *
@@ -940,9 +1005,9 @@ button.cif-link.on, button.view-link.on {
  *  - .q-input-block (textarea + Ask/Clear buttons) is position:fixed at
  *    the bottom, with a backdrop-blur and a top border so it reads as
  *    a chat composer
- *  - body gets padding-bottom == composer height so the last conversation
+ *  - footer gets padding-bottom above the composer height so the footer
  *    line is never hidden under the fixed bar
- *  - h1 / intro / Your-query label hidden on mobile — they were desktop
+ *  - h1 / intro / Your-query label hidden on mobile - they were desktop
  *    scaffolding the composer makes redundant
  */
 @media (max-width: 900px) {
@@ -972,10 +1037,12 @@ button.cif-link.on, button.view-link.on {
   main {
     display: flex;
     flex-direction: column;
-    /* Leave room for the fixed composer at the bottom — tweak in
-       .q-input-block if you change its height */
-    padding-bottom: 124px;
+    padding-bottom: 0;
   }
+  /* The footer is the last thing on the page, so it carries the room for
+     the fixed composer (about 130-200px tall; the textarea grows to
+     140px). Change it together with .q-input-block. */
+  footer { padding-bottom: calc(150px + env(safe-area-inset-bottom)); }
   .col.right { order: 1; }
   .col.left { order: 2; }
 
@@ -986,7 +1053,7 @@ button.cif-link.on, button.view-link.on {
 
   /* Single-scroll on mobile.
      Desktop rules make body height:100%, main flex:1, .col overflow-y:
-     auto — that gives each column its own scrollbar. On mobile we want
+     auto - that gives each column its own scrollbar. On mobile we want
      ONE scroll container (the page) and the composer fixed at the
      bottom. Force everything to natural flow with !important; the
      rules are local to this media query and have no other override
@@ -1014,7 +1081,7 @@ button.cif-link.on, button.view-link.on {
   }
   .col.left { border-right: none; border-top: 1px solid var(--border); }
 
-  /* Chat composer — fixed to the bottom edge of the viewport */
+  /* Chat composer - fixed to the bottom edge of the viewport */
   .q-input-block {
     position: fixed;
     left: 0;
@@ -1052,7 +1119,7 @@ button.cif-link.on, button.view-link.on {
     line-height: 1.4;
   }
 
-  /* Trace event rows — 2-row layout, timestamp on its own line */
+  /* Trace event rows - 2-row layout, timestamp on its own line */
   .ev {
     grid-template-columns: auto 1fr;
     grid-template-rows: auto auto;
@@ -1083,7 +1150,7 @@ button.cif-link.on, button.view-link.on {
   }
   .viz-holder { max-width: 100%; overflow-x: auto; }
 
-  /* 3D crystal viewer — full width, shorter */
+  /* 3D crystal viewer - full width, shorter */
   .crystal-viewer {
     display: block !important;
     width: 100% !important;
@@ -1092,7 +1159,7 @@ button.cif-link.on, button.view-link.on {
     margin: 8px 0 !important;
   }
 
-  /* CIF preview — full width, smaller font */
+  /* CIF preview - full width, smaller font */
   .cif-preview { max-width: 100%; }
   .cif-preview__head {
     padding: 8px 12px;
@@ -1105,7 +1172,7 @@ button.cif-link.on, button.view-link.on {
   }
   .cif-preview__save { font-size: 10px; padding: 4px 8px; }
 
-  /* MCP "Use as MCP" modal — wider, tighter */
+  /* MCP "Use as MCP" modal - wider, tighter */
   .mcp-modal { padding: 8px; }
   .mcp-modal__card { padding: 18px 16px; max-height: 92vh; }
   .mcp-modal__card h2 { font-size: 16px; }
@@ -1130,7 +1197,7 @@ button.cif-link.on, button.view-link.on {
   }
   .answer-toolbar .toolbar-btn { font-size: 10px; padding: 5px 8px; }
 
-  /* Final answer: tables overflow narrow screens — give them a horizontal
+  /* Final answer: tables overflow narrow screens - give them a horizontal
      scroll envelope instead of letting them break the column width */
   #answer table {
     display: block;
@@ -1146,7 +1213,7 @@ button.cif-link.on, button.view-link.on {
   }
   #answer pre { overflow-x: auto; }
 
-  /* Examples list — larger tap targets */
+  /* Examples list - larger tap targets */
   .examples li {
     padding: 11px 12px;
     font-size: 12px;
@@ -1155,7 +1222,7 @@ button.cif-link.on, button.view-link.on {
   /* Brand-home overlay (used on /magicow subpages, harmless here) */
   textarea#q { font-size: 14px; }  /* iOS won't auto-zoom at >=14px */
 
-  /* Prior-answer block (after a follow-up) — tighter */
+  /* Prior-answer block (after a follow-up) - tighter */
   .prior-answer { padding: 10px 12px 4px; }
 
   /* Phase-diagram point clickable circles a bit larger for fingers */
@@ -1163,22 +1230,23 @@ button.cif-link.on, button.view-link.on {
   svg.phase-diagram .pt.stable { r: 6 !important; }
 }
 
-/* Even tighter for narrow phones (≤ 480px) */
+/* Even tighter for narrow phones (<= 480px) */
 @media (max-width: 480px) {
   body { font-size: 13px; }
   h1 { font-size: 17px; }
   p.intro { font-size: 12.5px; }
 
-  /* Hide everything in the header meta block; keep brand + locale only */
-  header.top .meta { display: none; }
+  /* Keep only the "Use this MCP" link in the header meta row; it is the
+     only way to open the MCP modal. */
+  header.top .meta > :not(#mcp-info-btn) { display: none; }
   header.top { padding: 9px 12px; }
 
   .col { padding: 11px 11px; }
   /* Override the desktop min-height that the chat composer block now
-     wraps — keep composer compact on phones. */
+     wraps - keep composer compact on phones. */
   .q-input-block textarea#q { min-height: 40px; }
-  /* And tighten the bottom padding main reserves under the composer. */
-  main { padding-bottom: 116px; }
+  /* And tighten the room the footer reserves under the composer. */
+  footer { padding-bottom: calc(140px + env(safe-area-inset-bottom)); }
 
   /* Examples even bigger tap area, but trim long examples to fewer lines */
   .examples li {

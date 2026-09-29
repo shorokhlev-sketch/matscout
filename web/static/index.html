@@ -3,14 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>matscout — Materials Project research agent</title>
+<title>matscout: Materials Project research agent</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230a0a0c'/%3E%3Cpath d='M9 9h14v14H9z' fill='none' stroke='%23f59e0b' stroke-opacity='.45' stroke-width='1.5'/%3E%3Cg fill='%23f59e0b'%3E%3Ccircle cx='9' cy='9' r='3'/%3E%3Ccircle cx='23' cy='9' r='3'/%3E%3Ccircle cx='9' cy='23' r='3'/%3E%3Ccircle cx='23' cy='23' r='3'/%3E%3Ccircle cx='16' cy='16' r='3.6'/%3E%3C/g%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/styles.css">
-<!-- Minimal markdown render — covers code, headers, tables, lists -->
+<!-- Minimal markdown render - covers code, headers, tables, lists -->
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-<!-- 3D crystal viewer — loaded lazily once any mp-id renders. Tiny stub
+<!-- 3D crystal viewer - loaded lazily once any mp-id renders. Tiny stub
      keeps initial page weight low; the real lib is fetched on demand. -->
 <script>
   window._3DmolReady = null;
@@ -53,32 +54,27 @@
 <!-- Modal: how to use matscout as an MCP server in Claude Desktop / Code -->
 <div class="mcp-modal" id="mcp-modal" role="dialog" aria-modal="true" hidden>
   <div class="mcp-modal__card">
-    <button class="mcp-modal__close" id="mcp-modal-close" aria-label="Close">✕</button>
+    <button class="mcp-modal__close" id="mcp-modal-close" aria-label="Close"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
     <h2 data-i18n="mcp.title">You're using MCP right now.</h2>
     <p data-i18n-html="mcp.body1">
       Every query you send here is routed by OpenAI's Responses API to our live MCP server at
-      <code>matscout.prfo.design/mcp/http/</code>. The LLM (gpt-4o) doesn't run the 10 tools
-      itself — it discovers them via MCP <code>tools/list</code>, then calls them back over HTTP.
-      Open DevTools → Network and you'll see <code>response.output_item.added</code> events
-      whose <code>type=mcp_call</code> are real round-trips to this MCP endpoint.
+      <code>matscout.prfo.design/mcp/http/</code>. The LLM (gpt-4o) doesn't run the 25 tools
+      itself: it discovers them via MCP <code>tools/list</code>, then calls them back over HTTP.
+      Your browser only polls <code>/api/query/{id}</code>. The MCP calls run between OpenAI
+      and this server, and each one appears in the agent trace.
     </p>
     <p data-i18n="mcp.body2">
       Want to use the same MCP server from your own Claude (Desktop or Code)? It's a remote
-      MCP — just point at the URL:
+      MCP, so you only need the URL:
     </p>
-    <pre class="mcp-modal__pre" id="mcp-config-snippet"><code>{
-  "mcpServers": {
-    "matscout": {
-      "url": "https://matscout.prfo.design/mcp/http/"
-    }
-  }
-}</code></pre>
+    <pre class="mcp-modal__pre" id="mcp-config-snippet"><code>https://matscout.prfo.design/mcp/http/</code></pre>
     <p class="mcp-modal__small" data-i18n-html="mcp.body3">
-      Drop into <code>~/Library/Application Support/Claude/claude_desktop_config.json</code>
-      and restart Claude. No API keys, no subprocess — it's a live network endpoint. For the
-      stdio (local subprocess) flavour, see <a href="https://github.com/shorokhlev-sketch/matscout" target="_blank" rel="noopener">github.com/shorokhlev-sketch/matscout</a>.
+      Claude Desktop: Settings &gt; Connectors &gt; Add custom connector, paste this URL.
+      Claude Code: <code>claude mcp add --transport http matscout https://matscout.prfo.design/mcp/http/</code>.
+      No API key on your side. For <code>claude_desktop_config.json</code> or a local stdio
+      server, see <a href="https://github.com/shorokhlev-sketch/matscout" target="_blank" rel="noopener">github.com/shorokhlev-sketch/matscout</a>.
     </p>
-    <button class="mcp-modal__copy" id="mcp-copy-btn" data-i18n="mcp.copy">Copy snippet</button>
+    <button class="mcp-modal__copy" id="mcp-copy-btn" data-i18n="mcp.copy">Copy URL</button>
   </div>
 </div>
 
@@ -96,7 +92,7 @@
     <div class="q-input-block">
       <textarea id="q"></textarea>
       <div class="btn-row">
-        <button id="run" class="primary" data-i18n="left.askBtn">Ask matscout →</button>
+        <button id="run" class="primary" data-i18n="left.askBtn">Ask matscout</button>
         <button id="reset" class="ghost" type="button" data-i18n="left.clearBtn">Clear</button>
       </div>
     </div>
@@ -119,10 +115,10 @@
       <span data-i18n="right.answerHeader">Answer</span>
       <span class="answer-toolbar">
         <button id="share-btn" class="toolbar-btn" type="button" hidden>
-          <span data-i18n="right.shareBtn">Share research →</span>
+          <span data-i18n="right.shareBtn">Share research</span>
         </button>
         <a id="cite-btn" class="toolbar-btn" hidden>
-          <span data-i18n="right.citeBtn">Cite (BibTeX) ↓</span>
+          <span data-i18n="right.citeBtn">Cite (BibTeX)</span>
         </a>
         <span id="share-feedback" class="share-feedback mono"></span>
       </span>
@@ -137,28 +133,29 @@
 </footer>
 
 <script>
-// ── i18n dictionary ─────────────────────────────────────────────────────────
+// --- i18n dictionary ---
 const I18N = {
   en: {
     'header.tag': 'gpt-4o via MCP · live tools at /mcp/http/',
     'header.useMcp': 'Use this MCP',
     'mcp.title': "You're using MCP right now.",
-    'mcp.body1': 'Every query you send here is routed by OpenAI\'s Responses API to our live MCP server at <code>matscout.prfo.design/mcp/http/</code>. The LLM (gpt-4o) doesn\'t run the 10 tools itself — it discovers them via MCP <code>tools/list</code>, then calls them back over HTTP. Open DevTools → Network and you\'ll see <code>response.output_item.added</code> events whose <code>type=mcp_call</code> are real round-trips to this MCP endpoint.',
-    'mcp.body2': "Want to use the same MCP server from your own Claude (Desktop or Code)? It's a remote MCP — just point at the URL:",
-    'mcp.body3': "Drop into <code>~/Library/Application Support/Claude/claude_desktop_config.json</code> and restart Claude. No API keys, no subprocess — it's a live network endpoint. For the stdio (local subprocess) flavour, see <a href=\"https://github.com/shorokhlev-sketch/matscout\" target=\"_blank\" rel=\"noopener\">github.com/shorokhlev-sketch/matscout</a>.",
-    'mcp.copy': 'Copy snippet',
-    'mcp.copied': 'Copied ✓',
+    'mcp.body1': 'Every query you send here is routed by OpenAI\'s Responses API to our live MCP server at <code>matscout.prfo.design/mcp/http/</code>. The LLM (gpt-4o) doesn\'t run the 25 tools itself: it discovers them via MCP <code>tools/list</code>, then calls them back over HTTP. Your browser only polls <code>/api/query/{id}</code>. The MCP calls run between OpenAI and this server, and each one appears in the agent trace.',
+    'mcp.body2': "Want to use the same MCP server from your own Claude (Desktop or Code)? It's a remote MCP, so you only need the URL:",
+    'mcp.body3': "Claude Desktop: Settings &gt; Connectors &gt; Add custom connector, paste this URL. Claude Code: <code>claude mcp add --transport http matscout https://matscout.prfo.design/mcp/http/</code>. No API key on your side. For <code>claude_desktop_config.json</code> or a local stdio server, see <a href=\"https://github.com/shorokhlev-sketch/matscout\" target=\"_blank\" rel=\"noopener\">github.com/shorokhlev-sketch/matscout</a>.",
+    'mcp.copy': 'Copy URL',
+    'mcp.copied': 'Copied',
     'left.title': 'Ask a materials question',
     'left.intro': "Type a natural-language description of a material you need. The agent will translate it to property filters, query the database, self-correct if it gets zero or too many hits, and synthesize a ranked shortlist with trade-offs.",
     'left.queryLabel': 'Your query',
-    'left.askBtn': 'Ask matscout →',
+    'left.askBtn': 'Ask matscout',
     'left.clearBtn': 'Clear',
     'left.examplesHeader': 'Examples',
     'left.placeholder': 'Find a stable semiconductor with band gap near 1.5 eV for a solar cell. Give me three candidates with their formula, band gap, and density.',
+    'left.placeholderShort': 'Describe the material you need',
     'right.traceHeader': 'Agent trace',
     'right.answerHeader': 'Answer',
-    'right.shareBtn': 'Share research →',
-    'right.citeBtn': 'Cite (BibTeX) ↓',
+    'right.shareBtn': 'Share research',
+    'right.citeBtn': 'Cite (BibTeX)',
     'right.references': 'References',
     'right.refsCaption': 'Materials Project entries referenced in this run. Each link opens the canonical MP page.',
     'right.provenance': 'Provenance',
@@ -166,10 +163,16 @@ const I18N = {
     'right.provCommit': 'matscout',
     'right.provMP': 'Data source',
     'right.provBuilt': 'Snapshot built',
-    'share.copied': 'Link copied — paste it into your notes / footnote.',
+    'share.copied': 'Link copied. Paste it into your notes or a footnote.',
     'share.failed': 'Could not copy. Select the URL manually:',
     'snapshot.banner': 'Viewing a saved research snapshot.',
     'snapshot.newRun': 'Start a new run',
+    'snapshot.question': 'Question',
+    'snapshot.queryLabel': 'Continue this conversation',
+    'snapshot.askBtn': 'Ask follow-up',
+    'snapshot.placeholder': 'Ask a follow-up. The agent remembers the prior context.',
+    'snapshot.loading': 'Loading snapshot…',
+    'snapshot.notFound': (msg) => `Snapshot not found: ${msg}`,
     'answer.empty': 'Answer will appear here.',
     'status.starting': 'Starting agent…',
     'status.polling': 'Polling for events…',
@@ -177,42 +180,67 @@ const I18N = {
     'status.calling': (name) => `Calling ${name}…`,
     'status.toolReturned': 'Tool returned, gpt-4o reading result…',
     'status.toolError': 'Tool error, recovering…',
-    'status.done': (n, el) => `Done · ${n} tool call(s) · ${el}`,
+    'status.done': (n, el) => `Done · ${n} ${n === 1 ? 'tool call' : 'tool calls'}` + (el ? ` · ${el}` : ''),
     'status.hiccup': (cur, max) => `Network hiccup (${cur}/${max})…`,
     'status.error': 'Connection error · try again',
     'event.thinkingPlan': 'Planning next step…',
     'event.thinkingRead': 'Reading tool results, deciding next move…',
+    'event.thinking': 'Thinking…',
+    'event.turn': (n) => `turn ${n}`,
+    'event.adapting': 'Adapting',
+    'badge.thinking': 'thinking',
+    'badge.phase': 'phase',
+    'badge.reasoning': 'reasoning',
+    'badge.adaptation': 'adaptation',
+    'badge.tool_call': 'tool call',
+    'badge.tool_result': 'tool result',
+    'badge.tool_error': 'tool error',
+    'phase.discovery': 'Discovery: finding candidate materials',
+    'phase.analysis': 'Analysis: drilling in, ranking, composing answer',
+    'turn.followUp': 'Follow-up',
+    'turn.previous': 'Previous turn',
+    'cif.loading': 'loading CIF…',
+    'cif.lines': (n) => `${n} ${n === 1 ? 'line' : 'lines'}`,
+    'cif.save': 'Save .cif',
+    'cif.error': (msg) => `CIF error: ${msg}`,
+    'viewer.loading': 'loading 3D viewer…',
+    'viewer.hint': 'drag to rotate, scroll to zoom',
+    'viewer.hintTouch': 'drag to rotate, pinch to zoom',
+    'viewer.error': (msg) => `viewer error: ${msg}`,
+    'chip.cifTitle': (id) => `Preview or download the CIF file for ${id}`,
+    'chip.viewTitle': (id) => `Open the 3D crystal viewer for ${id}`,
     'examples': [
       'Find a stable semiconductor with band gap near 1.5 eV for a solar cell. Three candidates with formula, band gap and density.',
-      'Thermoelectric with low density (under 5 g/cm³) — three candidates and compare them. Explain the trade-offs.',
+      'Thermoelectric with low density (under 5 g/cm³): three candidates and compare them. Explain the trade-offs.',
       'Suggest sodium-based electrode candidates and sort them by stability. Top five only.',
       'Is mp-149 stable? Give a one-sentence verdict.',
       'Compare Si (mp-149) and diamond (mp-66) on band gap, density and stability.',
     ],
     'footer.html': 'Data: <a href="https://next-gen.materialsproject.org/" target="_blank" rel="noopener">Materials Project</a> · CC-BY 4.0. Agent: OpenAI gpt-4o. UI: vanilla JS, FastAPI, polling.',
-    'connDrop': 'Repeated network errors while polling. The agent run keeps going on the server — wait a few seconds and press <b>Ask matscout</b> again; the SQLite cache will skip already-completed tool calls.',
+    'connDrop': 'Repeated network errors while polling. The agent run keeps going on the server. Wait a few seconds and press <b>Ask matscout</b> again; the SQLite cache will skip already-completed tool calls.',
     'startFail': 'Failed to start run',
   },
   ru: {
     'header.tag': 'gpt-4o через MCP · живые тулы на /mcp/http/',
     'header.useMcp': 'Подключить этот MCP',
     'mcp.title': 'Прямо сейчас вы используете MCP.',
-    'mcp.body1': 'Каждый ваш запрос OpenAI Responses API маршрутизирует к нашему живому MCP-серверу на <code>matscout.prfo.design/mcp/http/</code>. LLM (gpt-4o) не исполняет 10 тулов сам — он находит их через MCP <code>tools/list</code> и вызывает по HTTP обратно к нам. Откройте DevTools → Network: события <code>response.output_item.added</code> с <code>type=mcp_call</code> — это реальные round-trip\'ы к этому endpoint\'у.',
-    'mcp.body2': 'Хотите использовать тот же MCP-сервер из своего Claude (Desktop или Code)? Это remote MCP — просто укажите URL:',
-    'mcp.body3': "Положите в <code>~/Library/Application Support/Claude/claude_desktop_config.json</code> и перезапустите Claude. Никаких API-ключей, никакого subprocess — это сетевой endpoint. Для stdio-варианта (локальный subprocess) — <a href=\"https://github.com/shorokhlev-sketch/matscout\" target=\"_blank\" rel=\"noopener\">github.com/shorokhlev-sketch/matscout</a>.",
-    'mcp.copy': 'Скопировать сниппет',
-    'mcp.copied': 'Скопировано ✓',
+    'mcp.body1': 'Каждый ваш запрос OpenAI Responses API маршрутизирует к нашему живому MCP-серверу на <code>matscout.prfo.design/mcp/http/</code>. LLM (gpt-4o) не исполняет 25 тулов сам: он находит их через MCP <code>tools/list</code> и вызывает по HTTP обратно к нам. Ваш браузер только опрашивает <code>/api/query/{id}</code>. MCP-вызовы идут между OpenAI и этим сервером, и каждый из них виден в трейсе агента.',
+    'mcp.body2': 'Хотите использовать тот же MCP-сервер из своего Claude (Desktop или Code)? Это remote MCP, нужен только URL:',
+    'mcp.body3': "Claude Desktop: Settings &gt; Connectors &gt; Add custom connector, вставьте этот URL. Claude Code: <code>claude mcp add --transport http matscout https://matscout.prfo.design/mcp/http/</code>. API-ключ с вашей стороны не нужен. Для <code>claude_desktop_config.json</code> или локального stdio-сервера см. <a href=\"https://github.com/shorokhlev-sketch/matscout\" target=\"_blank\" rel=\"noopener\">github.com/shorokhlev-sketch/matscout</a>.",
+    'mcp.copy': 'Скопировать URL',
+    'mcp.copied': 'Скопировано',
     'left.title': 'Задайте вопрос о материалах',
     'left.intro': 'Опишите словами материал, который вам нужен. Агент переведёт описание в фильтры свойств, запросит базу, при 0 или слишком многих кандидатах сам подстроит ограничения и вернёт ранжированный шорт-лист с разбором компромиссов.',
     'left.queryLabel': 'Ваш запрос',
-    'left.askBtn': 'Спросить matscout →',
+    'left.askBtn': 'Спросить matscout',
     'left.clearBtn': 'Очистить',
     'left.examplesHeader': 'Примеры',
     'left.placeholder': 'Найди стабильный полупроводник с band gap около 1.5 эВ под солнечную ячейку. Три кандидата с формулой, band gap и плотностью.',
+    'left.placeholderShort': 'Опишите нужный материал',
     'right.traceHeader': 'Трейс агента',
     'right.answerHeader': 'Ответ',
-    'right.shareBtn': 'Поделиться →',
-    'right.citeBtn': 'Цитата (BibTeX) ↓',
+    'right.shareBtn': 'Поделиться',
+    'right.citeBtn': 'Цитата (BibTeX)',
     'right.references': 'Источники',
     'right.refsCaption': 'Записи Materials Project, использованные в этом исследовании. Каждая ссылка открывает каноническую MP-страницу.',
     'right.provenance': 'Метаданные',
@@ -220,10 +248,16 @@ const I18N = {
     'right.provCommit': 'matscout',
     'right.provMP': 'Источник данных',
     'right.provBuilt': 'Снимок собран',
-    'share.copied': 'Ссылка скопирована — вставьте в заметки / сноску.',
+    'share.copied': 'Ссылка скопирована. Вставьте её в заметки или сноску.',
     'share.failed': 'Не получилось скопировать. Выделите ссылку вручную:',
     'snapshot.banner': 'Открыт сохранённый снимок исследования.',
     'snapshot.newRun': 'Новый запрос',
+    'snapshot.question': 'Вопрос',
+    'snapshot.queryLabel': 'Продолжить разговор',
+    'snapshot.askBtn': 'Спросить дальше',
+    'snapshot.placeholder': 'Спросите по этому исследованию, агент помнит контекст.',
+    'snapshot.loading': 'Загрузка снимка…',
+    'snapshot.notFound': (msg) => `Снимок не найден: ${msg}`,
     'answer.empty': 'Здесь появится ответ.',
     'status.starting': 'Запуск агента…',
     'status.polling': 'Опрос событий…',
@@ -231,20 +265,44 @@ const I18N = {
     'status.calling': (name) => `Вызываю ${name}…`,
     'status.toolReturned': 'Тул вернулся, gpt-4o читает результат…',
     'status.toolError': 'Ошибка тула, восстанавливаюсь…',
-    'status.done': (n, el) => `Готово · ${n} tool-call(s) · ${el}`,
+    'status.done': (n, el) => `Готово · вызовов инструментов: ${n}` + (el ? ` · ${el}` : ''),
     'status.hiccup': (cur, max) => `Сетевой сбой (${cur}/${max})…`,
     'status.error': 'Ошибка соединения · попробуйте ещё раз',
     'event.thinkingPlan': 'Планирую следующий шаг…',
     'event.thinkingRead': 'Читаю результат тула, выбираю что дальше…',
+    'event.thinking': 'Думаю…',
+    'event.turn': (n) => `шаг ${n}`,
+    'event.adapting': 'Корректировка',
+    'badge.thinking': 'размышление',
+    'badge.phase': 'фаза',
+    'badge.reasoning': 'рассуждение',
+    'badge.adaptation': 'коррекция',
+    'badge.tool_call': 'вызов тула',
+    'badge.tool_result': 'ответ тула',
+    'badge.tool_error': 'ошибка тула',
+    'phase.discovery': 'Поиск: подбор материалов-кандидатов',
+    'phase.analysis': 'Анализ: проверка, ранжирование, ответ',
+    'turn.followUp': 'Уточнение',
+    'turn.previous': 'Предыдущий ответ',
+    'cif.loading': 'загрузка CIF…',
+    'cif.lines': (n) => `${n} ${ruPlural(n, 'строка', 'строки', 'строк')}`,
+    'cif.save': 'Сохранить .cif',
+    'cif.error': (msg) => `Ошибка CIF: ${msg}`,
+    'viewer.loading': 'загрузка 3D-модели…',
+    'viewer.hint': 'тяните для поворота, колесо для масштаба',
+    'viewer.hintTouch': 'тяните для поворота, щипок для масштаба',
+    'viewer.error': (msg) => `ошибка 3D-модели: ${msg}`,
+    'chip.cifTitle': (id) => `Просмотр и загрузка CIF-файла для ${id}`,
+    'chip.viewTitle': (id) => `Открыть 3D-модель кристалла ${id}`,
     'examples': [
       'Найди стабильный полупроводник с band gap около 1.5 эВ под солнечную ячейку. Три кандидата с формулой, band gap и плотностью.',
-      'Термоэлектрик с низкой плотностью (меньше 5 г/см³) — три кандидата, сравни их. Объясни компромиссы.',
+      'Термоэлектрик с низкой плотностью (меньше 5 г/см³): три кандидата, сравни их. Объясни компромиссы.',
       'Предложи натрий-содержащие электродные материалы и отсортируй по стабильности. Только топ-5.',
       'mp-149 стабилен? Дай вердикт одним предложением.',
       'Сравни Si (mp-149) и алмаз (mp-66) по band gap, плотности и стабильности.',
     ],
     'footer.html': 'Данные: <a href="https://next-gen.materialsproject.org/" target="_blank" rel="noopener">Materials Project</a> · CC-BY 4.0. Агент: OpenAI gpt-4o. UI: vanilla JS, FastAPI, polling.',
-    'connDrop': 'Повторяющиеся сетевые ошибки при опросе. Агент продолжает работать на сервере — подождите пару секунд и нажмите <b>Спросить matscout</b> снова; SQLite-кэш пропустит уже выполненные tool-call-ы.',
+    'connDrop': 'Повторяющиеся сетевые ошибки при опросе. Агент продолжает работать на сервере. Подождите пару секунд и нажмите <b>Спросить matscout</b> снова; SQLite-кэш пропустит уже выполненные tool-call-ы.',
     'startFail': 'Не удалось запустить задачу',
   },
 };
@@ -256,23 +314,83 @@ let LOCALE = (() => {
   return (navigator.language || 'en').startsWith('ru') ? 'ru' : 'en';
 })();
 
+// True on /r/{id} permalinks: the input continues the saved conversation,
+// so applyI18n() must keep the follow-up placeholder instead of the
+// default example query.
+let snapshotMode = false;
+// True while a saved trace replays: stored events carry no timings, so the
+// per-row durations and the elapsed clock stay hidden instead of reading 0.0s.
+let replayMode = false;
+// Thinking rows count per run. The server restarts its turn counter in each
+// phase, so the raw `turn` field reads "turn 1" twice in a two-phase run.
+let thinkingCount = 0;
+// Run duration shown in the status line of a replayed snapshot, taken from
+// the stored started_at / finished_at. Empty when the snapshot lacks them.
+let replayElapsed = '';
+
 function t(key, ...args) {
-  const v = I18N[LOCALE]?.[key];
+  const v = I18N[LOCALE]?.[key] ?? I18N.en[key];
   if (typeof v === 'function') return v(...args);
-  if (v != null) return v;
-  return I18N.en[key] ?? key;
+  return v ?? key;
+}
+
+/** Russian noun form for a count: 1 строка, 2 строки, 5 строк. */
+function ruPlural(n, one, few, many) {
+  const m10 = n % 10, m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return one;
+  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+  return many;
+}
+
+/** Arguments stored next to a data-i18n key, so a locale switch can
+ *  re-render strings such as "turn 3" or "Done · 4 tool calls". */
+function i18nArgs(el) {
+  try {
+    return el.dataset.i18nArgs ? JSON.parse(el.dataset.i18nArgs) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** HTML for a translated span that applyI18n() keeps in sync with LOCALE. */
+function i18nSpan(key, args = [], cls = '') {
+  const a = args.length ? ` data-i18n-args="${escAttr(JSON.stringify(args))}"` : '';
+  const c = cls ? ` class="${cls}"` : '';
+  return `<span${c} data-i18n="${key}"${a}>${escAttr(t(key, ...args))}</span>`;
+}
+
+/** Composer placeholder: the follow-up hint on permalinks, a short line on
+ *  narrow phones (the long example is cut in half there), else the example. */
+function composerPlaceholder() {
+  if (snapshotMode) return t('snapshot.placeholder');
+  return window.matchMedia('(max-width: 480px)').matches
+    ? t('left.placeholderShort')
+    : t('left.placeholder');
 }
 
 function applyI18n() {
   document.documentElement.lang = LOCALE;
   for (const el of document.querySelectorAll('[data-i18n]')) {
-    el.textContent = t(el.dataset.i18n);
+    el.textContent = t(el.dataset.i18n, ...i18nArgs(el));
   }
   for (const el of document.querySelectorAll('[data-i18n-html]')) {
     el.innerHTML = t(el.dataset.i18nHtml);
   }
+  for (const el of document.querySelectorAll('[data-i18n-title]')) {
+    el.title = t(el.dataset.i18nTitle, ...i18nArgs(el));
+  }
+  // Trace rows that keep the server's raw text and localize it on render.
+  for (const el of document.querySelectorAll('[data-phase-raw]')) {
+    el.textContent = phaseText(el.dataset.phaseRaw);
+  }
+  for (const el of document.querySelectorAll('[data-thinking-raw]')) {
+    el.textContent = plainDashes(localizeThinkingContent(el.dataset.thinkingRaw));
+  }
+  for (const el of document.querySelectorAll('.prior-answer')) {
+    el.dataset.label = t('turn.previous');
+  }
   const q = document.querySelector('#q');
-  if (q) q.placeholder = t('left.placeholder');
+  if (q) q.placeholder = composerPlaceholder();
   // Examples list
   const ul = document.querySelector('#examples');
   if (ul) {
@@ -306,6 +424,13 @@ for (const btn of document.querySelectorAll('.loc-btn')) {
   });
 }
 
+// Swap between the long and the short composer placeholder when the
+// viewport crosses the phone breakpoint (rotation, window resize).
+window.matchMedia('(max-width: 480px)').addEventListener('change', () => {
+  const q = document.querySelector('#q');
+  if (q) q.placeholder = composerPlaceholder();
+});
+
 const $ = (sel) => document.querySelector(sel);
 const trace = $('#trace');
 const answerEl = $('#answer');
@@ -327,9 +452,9 @@ function addEvent(kind, body, opts = {}) {
   const t0 = performance.now();
   row.dataset.startedAt = String(t0);
   row.innerHTML =
-    `<span class="badge">${kind.replace('_', ' ')}</span>` +
+    i18nSpan(`badge.${kind}`, [], 'badge') +
     `<span class="body">${body}</span>` +
-    `<span class="ts mono">+${fmtElapsed(t0 - queryStart)}</span>`;
+    (replayMode ? '' : `<span class="ts mono">+${fmtElapsed(t0 - queryStart)}</span>`);
   trace.appendChild(row);
   row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   return row;
@@ -343,11 +468,12 @@ function addEvent(kind, body, opts = {}) {
  */
 function insertTurnDivider(query) {
   // Move the current answer (if any) into a "previous answer" block that
-  // sits ABOVE the live #answer container — chat-style history.
+  // sits ABOVE the live #answer container - chat-style history.
   const prevHtml = answerEl.innerHTML;
   if (prevHtml.trim()) {
     const archive = document.createElement('section');
     archive.className = 'prior-answer';
+    archive.dataset.label = t('turn.previous');
     archive.innerHTML = prevHtml;
     answerEl.parentNode.insertBefore(archive, answerEl);
     answerEl.innerHTML = '';
@@ -359,13 +485,13 @@ function insertTurnDivider(query) {
   div.className = 'turn-divider';
   div.innerHTML =
     `<span class="rule"></span>` +
-    `<span class="label">Follow-up</span>` +
-    `<span class="q mono">${escAttr(query)}</span>` +
+    i18nSpan('turn.followUp', [], 'label') +
+    `<span class="q mono">${escAttr(plainDashes(query))}</span>` +
     `<span class="rule"></span>`;
   trace.appendChild(div);
 }
 
-/** Enrich a specific subtree — used for archived prior-turn answers
+/** Enrich a specific subtree - used for archived prior-turn answers
  *  so their inline mp-id chips persist after we detach them. */
 function enrichInside(root) {
   enrichAnswerWithMpLinks(root);
@@ -375,15 +501,30 @@ function finalizeEvent(row, durationMs) {
   if (!row) return;
   row.classList.remove('live');
   const ts = row.querySelector('.ts');
-  if (ts && durationMs != null) {
-    ts.textContent = `${(durationMs / 1000).toFixed(1)}s`;
-    ts.classList.add('done');
+  if (!ts) return;
+  // A replayed trace has no real durations: drop the cell rather than
+  // print 0.0s next to every row.
+  if (replayMode || !durationMs) {
+    ts.remove();
+    return;
   }
+  ts.textContent = `${(durationMs / 1000).toFixed(1)}s`;
+  ts.classList.add('done');
 }
 
-function setStatus(text, cls) {
-  statusEl.textContent = text;
+/** Status line under the trace. Takes an I18N key plus its arguments, so a
+ *  locale switch re-renders it; no key clears the line. */
+function setStatus(cls, key, ...args) {
   statusEl.className = `status ${cls || ''}`;
+  if (!key) {
+    statusEl.textContent = '';
+    delete statusEl.dataset.i18n;
+    delete statusEl.dataset.i18nArgs;
+    return;
+  }
+  statusEl.dataset.i18n = key;
+  statusEl.dataset.i18nArgs = JSON.stringify(args);
+  statusEl.textContent = t(key, ...args);
 }
 
 function startTimer() {
@@ -407,7 +548,7 @@ const POLL_MAX_NETWORK_RETRIES = 12;  // ~18s of network hiccups tolerated
 async function ask(query) {
   // If we landed here from a /r/{id} snapshot view, lazily resume the
   // original conversation on the very first follow-up so the agent sees
-  // the prior trace's context. Idempotent — second call is a no-op.
+  // the prior trace's context. Idempotent - second call is a no-op.
   if (window._snapshotRunId && !window._conversationId) {
     await resumeSnapshotConversationOnce();
   }
@@ -422,8 +563,9 @@ async function ask(query) {
     answerEl.innerHTML = '';
   }
   pendingEvent = null;
+  thinkingCount = 0;
   hideShareButton();
-  setStatus(t('status.starting'), 'live');
+  setStatus('live', 'status.starting');
   startTimer();
   runBtn.disabled = true;
 
@@ -446,10 +588,10 @@ async function ask(query) {
     requestId = data.request_id;
     window._lastRunId = requestId;
     if (data.conversation_id) window._conversationId = data.conversation_id;
-    setStatus(t('status.polling'), 'live');
+    setStatus('live', 'status.polling');
   } catch (e) {
     addEvent('tool_error', `${t('startFail')}: ${e.message}`);
-    setStatus(t('status.error'), '');
+    setStatus('', 'status.error');
     runBtn.disabled = false;
     stopTimer();
     return;
@@ -469,12 +611,12 @@ async function ask(query) {
       networkErrors = 0;
     } catch (e) {
       networkErrors += 1;
-      setStatus(t('status.hiccup', networkErrors, POLL_MAX_NETWORK_RETRIES), 'live');
+      setStatus('live', 'status.hiccup', networkErrors, POLL_MAX_NETWORK_RETRIES);
       if (networkErrors >= POLL_MAX_NETWORK_RETRIES) {
         addEvent('tool_error',
           `${t('connDrop')} <span class="detail">(${e.message})</span>`
         );
-        setStatus(t('status.error'), '');
+        setStatus('', 'status.error');
         break;
       }
       await sleep(POLL_NETWORK_RETRY_MS);
@@ -492,9 +634,9 @@ async function ask(query) {
   stopTimer();
 
   // Pin this run to the URL so browser back/forward navigates between past
-  // turns and snapshots. We reuse the /r/{id} replay route — first turn of
+  // turns and snapshots. We reuse the /r/{id} replay route - first turn of
   // a conversation pushes a new entry, subsequent follow-ups push too, so
-  // ⌘[ steps backwards through the trace history.
+  // Cmd+[ steps backwards through the trace history.
   if (requestId) {
     const newPath = `/r/${requestId}`;
     if (location.pathname !== newPath) {
@@ -508,12 +650,12 @@ function sleep(ms) {
 }
 
 /**
- * Toggle an inline CIF text preview after the clicked '⬇ CIF' button.
+ * Toggle an inline CIF text preview after the clicked 'CIF' button.
  * First click fetches the CIF, expands a <pre> block with the text,
  * adds a "save as .cif" button INSIDE it. Second click collapses.
  *
  * Reads better than an opaque silent download for a user who wants to
- * see what the file contains before saving — most of the time the
+ * see what the file contains before saving - most of the time the
  * answer is "yes, this is the right material" and the preview is
  * enough; the save button is there if they actually need the file.
  */
@@ -531,7 +673,7 @@ async function toggleCifPreview(btn, materialId) {
   holder.className = 'cif-preview';
   holder.innerHTML =
     '<div class="cv-status mono" style="padding:14px;color:var(--fg-3);font-size:11px;">' +
-    'loading CIF…</div>';
+    `${i18nSpan('cif.loading')}</div>`;
   btn.parentNode.insertBefore(holder, btn.nextSibling);
 
   try {
@@ -543,12 +685,13 @@ async function toggleCifPreview(btn, materialId) {
     const head = document.createElement('div');
     head.className = 'cif-preview__head';
     head.innerHTML =
-      `<span class="mono">${escAttr(materialId)}.cif · ${cif.split('\n').length} lines</span>`;
+      `<span class="mono">${escAttr(materialId)}.cif · ${i18nSpan('cif.lines', [cif.split('\n').length])}</span>`;
     const dl = document.createElement('a');
     dl.href = `/api/structure/${materialId}.cif`;
     dl.setAttribute('download', `${materialId}.cif`);
     dl.className = 'cif-preview__save';
-    dl.textContent = '↓ Save .cif';
+    dl.dataset.i18n = 'cif.save';
+    dl.textContent = t('cif.save');
     head.appendChild(dl);
     holder.appendChild(head);
 
@@ -559,14 +702,14 @@ async function toggleCifPreview(btn, materialId) {
   } catch (e) {
     holder.innerHTML =
       `<div class="cv-status mono" style="padding:14px;color:var(--err);font-size:11px;">` +
-      `CIF error: ${escAttr(e.message || String(e))}</div>`;
+      `${i18nSpan('cif.error', [e.message || String(e)])}</div>`;
   } finally {
     btn.disabled = false;
   }
 }
 
 /**
- * Toggle a 3D crystal viewer inline after the clicked '◊ 3D' button.
+ * Toggle a 3D crystal viewer inline after the clicked '3D' button.
  * First click loads 3Dmol.js from CDN, fetches the CIF, instantiates the
  * viewer. Subsequent clicks just hide/show the existing container.
  */
@@ -581,12 +724,12 @@ async function toggleCrystalViewer(btn, materialId) {
   btn.disabled = true;
   const holder = document.createElement('span');
   holder.className = 'crystal-viewer';
-  // No inline sizing — let .crystal-viewer in styles.css own the
+  // No inline sizing - let .crystal-viewer in styles.css own the
   // dimensions so the mobile media query can override to full-width.
   holder.innerHTML =
     '<div class="cv-status mono" style="position:absolute;inset:0;display:flex;' +
     'align-items:center;justify-content:center;color:var(--fg-3);font-size:10px;">' +
-    'loading 3D viewer…</div>';
+    `${i18nSpan('viewer.loading')}</div>`;
   btn.parentNode.insertBefore(holder, btn.nextSibling);
 
   try {
@@ -619,11 +762,13 @@ async function toggleCrystalViewer(btn, materialId) {
     caption.style.cssText =
       'position:absolute;bottom:6px;left:10px;color:var(--fg-3);font-size:9.5px;' +
       'letter-spacing:0.08em;pointer-events:none;text-shadow:0 0 4px var(--bg);';
-    caption.textContent = `${materialId} · drag to rotate · scroll to zoom`;
+    // Touch screens zoom with a pinch, not a scroll wheel.
+    const hintKey = window.matchMedia('(pointer: coarse)').matches ? 'viewer.hintTouch' : 'viewer.hint';
+    caption.innerHTML = `${escAttr(materialId)} · ${i18nSpan(hintKey)}`;
     holder.appendChild(caption);
   } catch (e) {
     // The .cv-status node may already have been removed by the success
-    // path that ran before the error — re-create it if so.
+    // path that ran before the error - re-create it if so.
     let status = holder.querySelector('.cv-status');
     if (!status) {
       status = document.createElement('div');
@@ -635,7 +780,9 @@ async function toggleCrystalViewer(btn, materialId) {
       holder.appendChild(status);
     }
     status.style.color = 'var(--err)';
-    status.textContent = `viewer error: ${e?.message || String(e)}`;
+    status.dataset.i18n = 'viewer.error';
+    status.dataset.i18nArgs = JSON.stringify([e?.message || String(e)]);
+    status.textContent = t('viewer.error', e?.message || String(e));
     console.error('[3D viewer]', materialId, e);
   } finally {
     btn.disabled = false;
@@ -643,21 +790,20 @@ async function toggleCrystalViewer(btn, materialId) {
 }
 
 /**
-/**
  * Render a phase-diagram visualisation as inline SVG.
  * Switches projection based on the number of elements in the chemsys:
  *
- *   1 element  → polymorph stability ladder. All entries share the
+ *   1 element:   polymorph stability ladder. All entries share the
  *                same composition (a single elemental composition),
  *                so the only physical axis is "how far above the
  *                ground-state polymorph is each entry?" (eV/atom).
  *                A scatter of formation_E vs eah here is meaningless
- *                — both quantities are identical up to a constant.
- *   2 elements → proper convex-hull plot: x = mole fraction of element-2,
+ *                - both quantities are identical up to a constant.
+ *   2 elements:  proper convex-hull plot: x = mole fraction of element-2,
  *                y = formation energy per atom. Stable points are joined
  *                by the convex hull line; off-hull points float above.
- *   3+ elements → fall back to scatter (formation energy × E above hull).
- *                Ternary projection is a future polish.
+ *   3 elements:  Gibbs triangle (see renderTernaryTriangleSVG).
+ *   otherwise:   fall back to scatter (formation energy vs E above hull).
  */
 function renderPhaseDiagramSVG(viz) {
   if (!viz || !Array.isArray(viz.points) || viz.points.length === 0) return null;
@@ -696,8 +842,10 @@ function renderPhaseDiagramSVG(viz) {
  * three independent compositions as two correlated axes.
  */
 function renderTernaryTriangleSVG(viz, els, pts) {
-  const W = 460, H = 380;
-  const M = { top: 24, right: 32, bottom: 30, left: 32 };
+  const W = 460, H = 400;
+  // top leaves a title row (y=16) above the apex vertex label, so the
+  // label of els[0] never runs into the title text.
+  const M = { top: 46, right: 32, bottom: 30, left: 32 };
   const innerW = W - M.left - M.right;
   const innerH = H - M.top - M.bottom;
   // Equilateral triangle bounding box: side s so the height is innerH-ish.
@@ -789,20 +937,22 @@ function renderTernaryTriangleSVG(viz, els, pts) {
   svg.appendChild(txt(vB.x - 4, vB.y + 16, els[1], 'tern-vertex-left'));
   svg.appendChild(txt(vC.x + 4, vC.y + 16, els[2], 'tern-vertex-right'));
 
-  // Title chip
-  svg.appendChild(txt(M.left, M.top - 8,
-    `${viz.chemsys}  ·  ternary  ·  ${viz.n_stable} on hull / ${viz.n_metastable} metastable (full set)`,
+  // Title chip: counts describe the plotted dots (one per composition),
+  // not the full entry list the tool returned.
+  const nOnHull = pts.filter(p => (p.energy_above_hull || 0) < 1e-9).length;
+  svg.appendChild(txt(M.left, 16,
+    `${viz.chemsys}  ·  ternary  ·  ${pts.length} compositions, ${nOnHull} on hull`,
     'chart-title'));
 
   return svg;
 }
 
 /**
- * Unary "polymorph ladder" — one row per entry, ordered by E above hull,
+ * Unary "polymorph ladder" - one row per entry, ordered by E above hull,
  * so the ground-state polymorph anchors the left edge and progressively
  * less stable ones step right. The amber dot is the on-hull entry; open
  * dots are metastable. Communicates "how does each polymorph stack up
- * against the ground state?" — the only meaningful question for a
+ * against the ground state?" - the only meaningful question for a
  * single-element phase diagram.
  */
 function renderUnaryLadderSVG(viz, el) {
@@ -905,10 +1055,10 @@ function renderUnaryLadderSVG(viz, el) {
   return svg;
 }
 
-/** Binary convex-hull plot — what people actually expect from "phase diagram". */
+/** Binary convex-hull plot - what people actually expect from "phase diagram". */
 function renderBinaryHullSVG(viz, els, pts) {
-  const W = 460, H = 240;
-  const M = { top: 22, right: 18, bottom: 42, left: 56 };
+  const W = 460, H = 250;
+  const M = { top: 30, right: 18, bottom: 42, left: 62 };
   const innerW = W - M.left - M.right;
   const innerH = H - M.top - M.bottom;
 
@@ -937,6 +1087,14 @@ function renderBinaryHullSVG(viz, els, pts) {
   };
   svg.appendChild(line(M.left, M.top, M.left, M.top + innerH));
   svg.appendChild(line(M.left, M.top + innerH, M.left + innerW, M.top + innerH));
+  // Y ticks on a round step, so labels never land on top of each other
+  // (the old min / 0 / max labels collided when max was close to 0).
+  const yTicks = niceTicks(yMin - yPad, yMax + yPad, 5);
+  for (const v of yTicks.values) {
+    if (v === 0) continue;
+    svg.appendChild(line(M.left, sy(v), M.left + innerW, sy(v),
+      { stroke: 'rgba(255,255,255,0.05)' }));
+  }
   // 0-formation-energy guideline (= elemental references)
   svg.appendChild(line(M.left, sy(0), M.left + innerW, sy(0),
     { stroke: 'rgba(255,255,255,0.10)', dash: '3 4' }));
@@ -963,7 +1121,7 @@ function renderBinaryHullSVG(viz, els, pts) {
   hullPath.setAttribute('points', hull.map(h => `${sx(h.x)},${sy(h.y)}`).join(' '));
   svg.appendChild(hullPath);
 
-  // Plot all points (real ones — virtual endpoints aren't drawn as dots)
+  // Plot all points (real ones - virtual endpoints aren't drawn as dots)
   const onHullSet = new Set(hull.filter(h => h.p).map(h => h.p));
   for (const p of pts) {
     const onHull = onHullSet.has(p) || (p.is_stable && Math.abs(p.formation_energy_per_atom) < 1e9);
@@ -1006,22 +1164,40 @@ function renderBinaryHullSVG(viz, els, pts) {
   yLab.setAttribute('transform', `translate(14 ${M.top + innerH / 2}) rotate(-90)`);
   yLab.setAttribute('text-anchor', 'middle');
   svg.appendChild(yLab);
-  svg.appendChild(txt(M.left - 6, sy(yMax) + 3, yMax.toFixed(2), 'tick-label'));
-  svg.appendChild(txt(M.left - 6, sy(0) + 3, '0', 'tick-label'));
-  if (yMin < 0) svg.appendChild(txt(M.left - 6, sy(yMin) + 3, yMin.toFixed(2), 'tick-label'));
+  for (const v of yTicks.values) {
+    svg.appendChild(txt(M.left - 6, sy(v) + 3, v === 0 ? '0' : v.toFixed(yTicks.decimals), 'tick-label'));
+  }
 
-  // Title chip
-  svg.appendChild(txt(M.left, M.top - 8,
-    `${viz.chemsys}  ·  convex hull  ·  ${viz.n_stable} on hull / ${viz.n_metastable} metastable`,
+  // Title chip: counts describe the plotted dots (lowest-energy entry per
+  // composition), not the full entry list the tool returned.
+  const nOnHull = pts.filter(p => p.is_stable).length;
+  svg.appendChild(txt(M.left, 14,
+    `${viz.chemsys}  ·  convex hull  ·  ${pts.length} compositions, ${nOnHull} on hull`,
     'chart-title'));
 
   return svg;
 }
 
-/** Andrew's monotone chain lower hull on (x, y) — y is energy, lower is better.
+/** Round tick values covering [lo, hi]: step is 1, 2 or 5 times a power
+ *  of ten, chosen so at most `maxTicks` ticks fit. Always includes 0 when
+ *  the range spans it. */
+function niceTicks(lo, hi, maxTicks) {
+  const span = Math.max(hi - lo, 1e-9);
+  const raw = span / Math.max(maxTicks - 1, 1);
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = [1, 2, 5, 10].map(f => f * mag).find(st => st >= raw) || 10 * mag;
+  const values = [];
+  for (let v = Math.ceil(lo / step) * step; v <= hi + step * 1e-6; v += step) {
+    values.push(Math.abs(v) < step * 1e-6 ? 0 : v);
+  }
+  const decimals = Math.max(0, -Math.floor(Math.log10(step) + 1e-9));
+  return { values, decimals };
+}
+
+/** Andrew's monotone chain lower hull on (x, y) - y is energy, lower is better.
  *
  * Lower hull == the boundary that sags downward through the points; in
- * thermodynamics this is the boundary below which no entry exists — i.e.
+ * thermodynamics this is the boundary below which no entry exists - i.e.
  * the convex hull of stable phases. Standard Andrew's monotone chain
  * convention: pop when the new turn is a right turn or collinear
  * (cross <= 0); keep when it's a strict left turn (cross > 0), which
@@ -1051,7 +1227,7 @@ function renderScatterSVG(viz) {
   const innerW = W - M.left - M.right;
   const innerH = H - M.top - M.bottom;
 
-  // Filter out points that don't have both axes — they don't plot.
+  // Filter out points that don't have both axes - they don't plot.
   const pts = viz.points.filter(p =>
     typeof p.formation_energy_per_atom === 'number' &&
     typeof p.energy_above_hull === 'number'
@@ -1073,8 +1249,9 @@ function renderScatterSVG(viz) {
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
   svg.setAttribute('class', 'phase-diagram');
   svg.setAttribute('role', 'img');
+  const nStable = pts.filter(p => p.is_stable).length;
   svg.setAttribute('aria-label',
-    `Phase diagram scatter for ${viz.chemsys}: ${viz.n_stable} stable, ${viz.n_metastable} metastable phases.`);
+    `Phase diagram scatter for ${viz.chemsys}: ${nStable} stable, ${pts.length - nStable} metastable phases plotted.`);
 
   // Axes
   const axis = (x1_, y1_, x2_, y2_) => {
@@ -1116,7 +1293,7 @@ function renderScatterSVG(viz) {
   svg.appendChild(txt(M.left - 6, sy(0) + 3, '0', 'tick-label'));
 
   // Title chip
-  const title = txt(M.left, M.top - 6, `${viz.chemsys}  ·  ${viz.n_stable} stable, ${viz.n_metastable} metastable`, 'chart-title');
+  const title = txt(M.left, M.top - 6, `${viz.chemsys}  ·  ${nStable} stable, ${pts.length - nStable} metastable`, 'chart-title');
   svg.appendChild(title);
 
   // Points
@@ -1168,7 +1345,7 @@ function renderScatterSVG(viz) {
 
 function fmtArgs(args) {
   if (!args || !Object.keys(args).length) return '';
-  // Drop null / undefined / empty-array entries — Pydantic dumps all
+  // Drop null / undefined / empty-array entries - Pydantic dumps all
   // optional fields by default, but only the ones the agent actually
   // set carry signal. Showing `null` everywhere clutters the trace.
   const isEmpty = (v) =>
@@ -1178,11 +1355,39 @@ function fmtArgs(args) {
   const kept = Object.entries(args).filter(([, v]) => !isEmpty(v));
   if (!kept.length) return '';
   return kept
-    .map(([k, v]) => `<span class="kv"><span class="k">${k}</span>=<span class="v">${escAttr(JSON.stringify(v))}</span></span>`)
+    .map(([k, v]) => `<span class="kv"><span class="k">${escAttr(k)}</span>=<span class="v">${escAttr(JSON.stringify(v))}</span></span>`)
     .join(', ');
 }
 function escAttr(s) {
-  return String(s).replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+  return String(s).replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+/** Phase header text. Snapshots saved before the runner switched to plain
+ *  labels store "<pictograph> Discovery <em dash> ..."; strip the pictograph
+ *  and turn the dash into a colon so old permalinks match new runs. */
+function phaseLabel(raw) {
+  return String(raw || '')
+    .replace(/\p{Extended_Pictographic}\uFE0F?/gu, '')
+    .replace(/\s+[\u2013\u2014]\s+/g, ': ')
+    .trim();
+}
+
+/** Phase header in the current locale. The runner emits two fixed English
+ *  labels; map them by prefix, keep anything else as stored. */
+function phaseText(raw) {
+  const label = phaseLabel(raw);
+  if (/^Discovery\b/.test(label)) return t('phase.discovery');
+  if (/^Analysis\b/.test(label)) return t('phase.analysis');
+  return label;
+}
+
+/** Model output and stored questions can carry em and en dashes. Show a
+ *  hyphen-minus instead: tight between digits (1.3-1.7), spaced elsewhere.
+ *  Works per line, so a dash never joins two markdown lines. */
+function plainDashes(s) {
+  return String(s || '')
+    .replace(/(\d)[ \t]*[\u2013\u2014][ \t]*(?=\d)/g, '$1-')
+    .replace(/[ \t]*[\u2013\u2014][ \t]*/g, ' - ');
 }
 
 function localizeThinkingContent(raw) {
@@ -1201,38 +1406,44 @@ function handleEvent(kind, p) {
   }
 
   if (p.kind === 'thinking') {
-    const content = localizeThinkingContent(p.content || 'Thinking…');
+    thinkingCount += 1;
+    const raw = p.content || '';
+    const detail = raw
+      ? `<span class="detail" data-thinking-raw="${escAttr(raw)}">` +
+        `${escAttr(plainDashes(localizeThinkingContent(raw)))}</span>`
+      : i18nSpan('event.thinking', [], 'detail');
     pendingEvent = addEvent('thinking',
-      `<span class="name">turn ${p.turn || '?'}</span> <span class="detail">${escAttr(content)}</span>`,
-      { live: true });
-    setStatus(t('status.thinking', p.turn), 'live');
+      `${i18nSpan('event.turn', [thinkingCount], 'name')} ${detail}`,
+      { live: !replayMode });
+    setStatus('live', 'status.thinking', thinkingCount);
   } else if (p.kind === 'phase') {
-    // Major workflow phase divider — Discovery (🔍) vs Analysis (📊).
+    // Major workflow phase divider: Discovery vs Analysis.
     // Bigger and more visible than reasoning bubbles because it marks
     // a real architectural boundary in the agent's work.
     addEvent('phase',
-      `<span class="detail">${escAttr(p.content || '')}</span>`);
+      `<span class="detail" data-phase-raw="${escAttr(p.content || '')}">` +
+      `${escAttr(phaseText(p.content))}</span>`);
   } else if (p.kind === 'reasoning') {
-    // Agent narration — what the model is about to do, or a synthetic
+    // Agent narration - what the model is about to do, or a synthetic
     // sentence we generated from the tool name + args when the model
     // skipped its own narration.
     addEvent('reasoning',
-      `<span class="detail">${escAttr(p.content || '')}</span>`);
+      `<span class="detail">${escAttr(plainDashes(p.content))}</span>`);
   } else if (p.kind === 'adaptation') {
-    // Self-correction event — model widened a filter after 0 hits, or
+    // Self-correction event - model widened a filter after 0 hits, or
     // server-side detected a retry-with-relaxed-args. Distinguished
     // visually so the viewer sees the agent adjusting course.
     addEvent('adaptation',
-      `<span class="badge-label">↻ Adapting</span>` +
-      `<span class="detail">${escAttr((p.content || '').replace(/^Adapting:\s*/i, ''))}</span>`);
+      i18nSpan('event.adapting', [], 'badge-label') +
+      ` <span class="detail">${escAttr(plainDashes((p.content || '').replace(/^Adapting:\s*/i, '')))}</span>`);
   } else if (p.kind === 'tool_call') {
     pendingEvent = addEvent('tool_call',
-      `<span class="name">${p.name}</span><span class="detail">${fmtArgs(p.args)}</span>`,
-      { live: true });
-    setStatus(t('status.calling', p.name), 'live');
+      `<span class="name">${escAttr(p.name || '')}</span> <span class="detail">${fmtArgs(p.args)}</span>`,
+      { live: !replayMode });
+    setStatus('live', 'status.calling', p.name);
   } else if (p.kind === 'tool_result') {
     const row = addEvent('tool_result',
-      `<span class="name">${p.name || ''}</span><span class="detail">→ ${escAttr(p.result_summary || 'ok')}</span>`);
+      `<span class="name">${escAttr(p.name || '')}</span> <span class="detail">${escAttr(p.result_summary || 'ok')}</span>`);
     if (p.viz && row) {
       const svg = renderPhaseDiagramSVG(p.viz);
       if (svg) {
@@ -1242,16 +1453,16 @@ function handleEvent(kind, p) {
         row.appendChild(holder);
       }
     }
-    setStatus(t('status.toolReturned'), 'live');
+    setStatus('live', 'status.toolReturned');
   } else if (p.kind === 'tool_error') {
     addEvent('tool_error',
-      `<span class="name">${p.name || ''}</span><span class="detail">⨯ ${escAttr(p.error)}</span>`);
-    setStatus(t('status.toolError'), 'live');
+      `<span class="name">${escAttr(p.name || '')}</span> <span class="detail">${escAttr(p.error || '')}</span>`);
+    setStatus('live', 'status.toolError');
   } else if (p.kind === 'final') {
-    answerEl.innerHTML = marked.parse(p.content || '');
+    answerEl.innerHTML = marked.parse(plainDashes(p.content));
     const ncalls = trace.querySelectorAll('.ev.tool_call').length;
-    const elapsed = fmtElapsed(performance.now() - queryStart);
-    setStatus(t('status.done', ncalls, elapsed), 'done');
+    const elapsed = replayMode ? replayElapsed : fmtElapsed(performance.now() - queryStart);
+    setStatus('done', 'status.done', ncalls, elapsed);
     stopTimer();
     // Run id was captured in ask(); make it shareable now.
     if (window._lastRunId) showShareButton(window._lastRunId);
@@ -1283,7 +1494,7 @@ $('#q').addEventListener('keydown', (e) => {
   }
 });
 
-// ── share-link logic ──────────────────────────────────────────────────────
+// --- share-link logic ---
 let currentRunId = null;
 
 function showShareButton(rid) {
@@ -1326,37 +1537,44 @@ function enrichAnswerWithMpLinks(root) {
     rx.lastIndex = 0;
     let m;
     while ((m = rx.exec(text)) !== null) {
+      // Capture the id per match: the click handlers below run after the
+      // loop has finished, when `m` is already null.
+      const id = m[0];
       if (m.index > lastIdx) frag.appendChild(document.createTextNode(text.slice(lastIdx, m.index)));
       const a = document.createElement('a');
-      a.href = `https://next-gen.materialsproject.org/materials/${m[0]}`;
+      a.href = `https://next-gen.materialsproject.org/materials/${id}`;
       a.target = '_blank';
       a.rel = 'noopener';
       a.className = 'mp-link';
-      a.textContent = m[0];
+      a.textContent = id;
       frag.appendChild(a);
       // Inline action chips right after each mp-id.
       // CIF chip: click opens an inline text preview with a download
-      // button INSIDE it — easier than the previous "just download
+      // button INSIDE it - easier than the previous "just download
       // silently" pattern when the user wants to look at the file.
       const cifBtn = document.createElement('button');
       cifBtn.type = 'button';
       cifBtn.className = 'cif-link';
-      cifBtn.textContent = '⬇ CIF';
-      cifBtn.title = `Preview / download CIF file for ${m[0]}`;
-      cifBtn.addEventListener('click', () => toggleCifPreview(cifBtn, m[0]));
-      // 3D viewer toggle — clicking expands an inline crystal viewer with
+      cifBtn.textContent = 'CIF';
+      cifBtn.dataset.i18nTitle = 'chip.cifTitle';
+      cifBtn.dataset.i18nArgs = JSON.stringify([id]);
+      cifBtn.title = t('chip.cifTitle', id);
+      cifBtn.addEventListener('click', () => toggleCifPreview(cifBtn, id));
+      // 3D viewer toggle - clicking expands an inline crystal viewer with
       // the structure rotating in a ball-and-stick model.
       const view = document.createElement('button');
       view.type = 'button';
       view.className = 'view-link';
-      view.textContent = '◊ 3D';
-      view.title = `Open 3D crystal viewer for ${m[0]}`;
-      view.addEventListener('click', () => toggleCrystalViewer(view, m[0]));
+      view.textContent = '3D';
+      view.dataset.i18nTitle = 'chip.viewTitle';
+      view.dataset.i18nArgs = JSON.stringify([id]);
+      view.title = t('chip.viewTitle', id);
+      view.addEventListener('click', () => toggleCrystalViewer(view, id));
       frag.appendChild(document.createTextNode(' '));
       frag.appendChild(cifBtn);
       frag.appendChild(document.createTextNode(' '));
       frag.appendChild(view);
-      lastIdx = m.index + m[0].length;
+      lastIdx = m.index + id.length;
     }
     if (lastIdx < text.length) frag.appendChild(document.createTextNode(text.slice(lastIdx)));
     node.parentNode.replaceChild(frag, node);
@@ -1370,15 +1588,16 @@ async function renderReferences(rid) {
       fetch(`/api/research/${rid}`).then(r => r.ok ? r.json() : null),
     ]);
 
-    // References block (mp-ids → MP pages)
+    // References block (mp-ids linked to MP pages)
     if (mats && mats.materials.length) {
       document.querySelector('.references-block')?.remove();
       const wrap = document.createElement('section');
       wrap.className = 'references-block';
       const h = document.createElement('h3');
-      h.textContent = t('right.references') + ` (${mats.materials.length})`;
+      h.innerHTML = `${i18nSpan('right.references')} (${mats.materials.length})`;
       const p = document.createElement('p');
       p.className = 'references-caption';
+      p.dataset.i18n = 'right.refsCaption';
       p.textContent = t('right.refsCaption');
       const ul = document.createElement('ul');
       for (const m of mats.materials) {
@@ -1402,24 +1621,26 @@ async function renderReferences(rid) {
       answerEl.parentNode.appendChild(wrap);
     }
 
-    // Provenance block — only available after the run is fully done
+    // Provenance block - only available after the run is fully done
     if (snap && snap.metadata && Object.keys(snap.metadata).length) {
       document.querySelector('.provenance-block')?.remove();
       const md = snap.metadata;
       const wrap = document.createElement('section');
       wrap.className = 'provenance-block mono';
       const h = document.createElement('h3');
+      h.dataset.i18n = 'right.provenance';
       h.textContent = t('right.provenance');
       const dl = document.createElement('dl');
       const rows = [
-        [t('right.provModel'), md.model || 'gpt-4o'],
-        [t('right.provCommit'), `v${md.matscout_version} · ${md.matscout_commit}`],
-        [t('right.provMP'), md.mp_data_source + ' · CC-BY 4.0'],
-        [t('right.provBuilt'), md.snapshot_built_at],
+        ['right.provModel', md.model || 'gpt-4o'],
+        ['right.provCommit', `v${md.matscout_version} · ${md.matscout_commit}`],
+        ['right.provMP', md.mp_data_source + ' · CC-BY 4.0'],
+        ['right.provBuilt', md.snapshot_built_at],
       ];
       for (const [k, v] of rows) {
         const dt = document.createElement('dt');
-        dt.textContent = k;
+        dt.dataset.i18n = k;
+        dt.textContent = t(k);
         const dd = document.createElement('dd');
         dd.textContent = v;
         dl.appendChild(dt);
@@ -1429,7 +1650,7 @@ async function renderReferences(rid) {
       wrap.appendChild(dl);
       answerEl.parentNode.appendChild(wrap);
     }
-  } catch { /* non-fatal — references and provenance are nice-to-haves */ }
+  } catch { /* non-fatal - references and provenance are nice-to-haves */ }
 }
 
 $('#share-btn').addEventListener('click', async () => {
@@ -1446,13 +1667,12 @@ $('#share-btn').addEventListener('click', async () => {
   }
 });
 
-// ── snapshot-replay (when path is /r/{id}) ────────────────────────────────
+// --- snapshot-replay (when path is /r/{id}) ---
 async function maybeReplaySnapshot() {
   const m = location.pathname.match(/^\/r\/([a-f0-9]+)$/i);
   if (!m) return false;
   const rid = m[1];
-  startTimer();  // re-uses the existing elapsed widget — shows total snapshot age
-  setStatus('Loading snapshot…', 'live');
+  setStatus('live', 'snapshot.loading');
 
   let snap;
   try {
@@ -1460,57 +1680,68 @@ async function maybeReplaySnapshot() {
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     snap = await r.json();
   } catch (e) {
-    setStatus(`Snapshot not found: ${e.message}`, '');
-    stopTimer();
+    setStatus('', 'snapshot.notFound', e.message);
     return true;
   }
 
   // Snapshot views keep the input empty + prompt the user to ask a
-  // follow-up. The original query is shown in the banner above the trace,
-  // not in the input itself — pre-filling the input would be confusing
-  // (people read it as readonly history, miss that they can continue).
+  // follow-up. The original query is shown under the banner above the
+  // trace, not in the input itself - pre-filling the input would be
+  // confusing (people read it as readonly history, miss that they can
+  // continue). snapshotMode makes applyI18n() pick the follow-up
+  // placeholder, label and button text, also after a locale switch.
+  snapshotMode = true;
   $('#q').value = '';
-  $('#q').setAttribute('placeholder', LOCALE === 'ru'
-    ? 'Спросите по этому исследованию — агент помнит контекст…'
-    : 'Ask a follow-up — the agent remembers the prior context…');
+  // Show the run in its own language for this view only; the EN/RU
+  // buttons stay the only thing that saves a preference.
   if (snap.locale && SUPPORTED_LOCALES.includes(snap.locale)) {
     LOCALE = snap.locale;
-    localStorage.setItem('matscout.locale', LOCALE);
-    applyI18n();
   }
+  const label = document.querySelector('label[for="q"]');
+  if (label) {
+    label.dataset.i18n = 'snapshot.queryLabel';
+    label.classList.add('q-label--followup');
+  }
+  if (runBtn) runBtn.dataset.i18n = 'snapshot.askBtn';
 
-  // Banner over the trace
+  // Banner over the trace, then the stored question.
   const banner = document.createElement('div');
   banner.className = 'snapshot-banner';
-  const ageMs = Date.now() - (snap.started_at * 1000);
   banner.innerHTML =
-    `<span>${t('snapshot.banner')} ` +
-    `<code>${rid}</code> · ` +
+    `<span><span data-i18n="snapshot.banner"></span> ` +
+    `<code>${escAttr(rid)}</code> ·&nbsp;` +
     `${new Date(snap.started_at * 1000).toISOString().replace('T', ' ').slice(0, 16)} UTC</span>` +
-    `<a href="/">${t('snapshot.newRun')} →</a>`;
+    `<a href="/"><span data-i18n="snapshot.newRun"></span></a>`;
   trace.parentNode.insertBefore(banner, trace);
+  if (snap.query) {
+    const question = document.createElement('div');
+    question.className = 'turn-divider snapshot-question';
+    question.innerHTML =
+      `<span class="label" data-i18n="snapshot.question"></span>` +
+      `<span class="q">${escAttr(plainDashes(snap.query))}</span>`;
+    trace.parentNode.insertBefore(question, trace);
+  }
+  applyI18n();
 
-  // Replay events
-  for (const ev of snap.events) handleEvent(ev.kind, ev);
-  stopTimer();
-  // Leave the input live — a follow-up will be sent against a server-side
+  // Replay events. Stored events carry no timings: replayMode hides the
+  // per-row clocks, and the header shows the stored run duration if known.
+  const started = Number(snap.started_at);
+  const finished = Number(snap.finished_at);
+  replayElapsed = started > 0 && finished > started ? fmtElapsed((finished - started) * 1000) : '';
+  $('#elapsed').textContent = replayElapsed;
+  replayMode = true;
+  thinkingCount = 0;
+  try {
+    for (const ev of snap.events) handleEvent(ev.kind, ev);
+  } finally {
+    replayMode = false;
+  }
+  // Leave the input live - a follow-up will be sent against a server-side
   // reconstructed conversation (see resumeSnapshotConversationOnce).
   runBtn.disabled = false;
   $('#q').removeAttribute('readonly');
   window._snapshotRunId = rid;     // signals: first ask() should resume first
 
-  // Re-label the input so it's obvious the visitor can continue this run.
-  const label = document.querySelector('label[for="q"]');
-  if (label) {
-    label.textContent = (LOCALE === 'ru')
-      ? 'Продолжить разговор'
-      : 'Continue this conversation';
-    label.classList.add('q-label--followup');
-  }
-  // Re-label the primary button too — same hint, second surface.
-  if (runBtn) {
-    runBtn.textContent = (LOCALE === 'ru') ? 'Спросить дальше →' : 'Ask follow-up →';
-  }
   // Smooth-scroll the input into view and focus it so the user immediately
   // sees where to type. Without this the input sits up in the column header
   // while their eyes are on the answer at the bottom of the page.
@@ -1525,7 +1756,7 @@ async function maybeReplaySnapshot() {
 
 /**
  * Lazily resume the snapshot's original conversation server-side. Called
- * on the user's first follow-up from a /r/{id} view — we POST to the
+ * on the user's first follow-up from a /r/{id} view - we POST to the
  * resume endpoint, get back a fresh conversation_id, then the regular
  * ask() path uses it like any continuation.
  */
@@ -1538,10 +1769,10 @@ async function resumeSnapshotConversationOnce() {
     window._conversationId = data.conversation_id;
   } catch (e) {
     console.warn('snapshot resume failed:', e.message);
-    // Fall through — the user just gets a fresh conversation. Not ideal
+    // Fall through - the user just gets a fresh conversation. Not ideal
     // but not blocking; the follow-up still goes through.
   }
-  // Clear the marker — one-shot.
+  // Clear the marker - one-shot.
   window._snapshotRunId = null;
 }
 
@@ -1549,10 +1780,10 @@ async function resumeSnapshotConversationOnce() {
 applyI18n();
 maybeReplaySnapshot();
 
-// ── "Use as MCP" modal ────────────────────────────────────────────────────
-// The header tag says "OpenAI playground · MCP server available" — clicking
-// "Use as MCP" opens the snippet they need to paste into Claude Desktop's
-// config. Important framing because the playground itself reasons with
+// --- "Use as MCP" modal ---
+// The header tag says "OpenAI playground · MCP server available" - clicking
+// "Use as MCP" opens the endpoint URL to add as a connector in Claude
+// Desktop or Claude Code. Important framing because the playground itself reasons with
 // gpt-4o, and a visitor here could otherwise leave thinking they trialed
 // the MCP path when they only trialed the OpenAI one.
 (function wireMcpModal() {
@@ -1579,7 +1810,7 @@ maybeReplaySnapshot();
       copyBtn.textContent = t('mcp.copied');
       setTimeout(() => { copyBtn.textContent = original; }, 1500);
     } catch (e) {
-      // Fall back: select the text so the user can ⌘C manually.
+      // Fall back: select the text so the user can press Cmd+C manually.
       const range = document.createRange();
       range.selectNodeContents(snippet);
       const sel = window.getSelection();
@@ -1589,7 +1820,7 @@ maybeReplaySnapshot();
   });
 })();
 
-// ── browser back/forward across past runs ────────────────────────────────
+// --- browser back/forward across past runs ---
 // When the user navigates to a previously pushed history entry, the simplest
 // way to reproduce the matching agent trace is to re-trigger the initial
 // snapshot replay path. Hard reload keeps the rendering pipeline identical
@@ -1598,8 +1829,8 @@ window.addEventListener('popstate', () => {
   location.reload();
 });
 
-// Brand click should always return to a fresh home — drop the in-memory
-// conversation so the visit is truly clean (mirrors what nginx's /r/{id} →
+// Brand click should always return to a fresh home - drop the in-memory
+// conversation so the visit is truly clean (mirrors what nginx's /r/{id} to
 // / navigation would do anyway, but instantaneously).
 document.querySelectorAll('[data-brand-home]').forEach(el => {
   el.addEventListener('click', () => {

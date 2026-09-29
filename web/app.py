@@ -1,13 +1,14 @@
-"""FastAPI playground for matscout — polling-based agent runner.
+"""FastAPI playground for matscout - polling-based agent runner.
 
-Originally this used SSE, but Russian-ISP DPI kept ripping long-lived
-``text/event-stream`` connections regardless of heartbeat frequency.
+Originally this used SSE, but DPI middleboxes on some networks kept
+cutting long-lived ``text/event-stream`` connections regardless of
+heartbeat frequency.
 Switched to a poll-friendly request-id pattern:
 
   POST /api/query              -> {"request_id": "..."}            (instant)
   GET  /api/query/{id}?since=N -> {"events": [...], "status": ...}  (short, repeatable)
 
-Each poll is a short HTTPS round-trip — DPI sees the same pattern as a
+Each poll is a short HTTPS round-trip - DPI sees the same pattern as a
 normal REST API and leaves it alone. Browser polls every 500 ms.
 
 Run:
@@ -49,7 +50,7 @@ def _phase_diagram_viz(result: dict[str, Any]) -> dict[str, Any]:
     browser decides which projection to draw.
     """
     chemsys_str: str = result.get("chemsys") or result.get("anchor_formula") or ""
-    # Sorted, canonical element order — same as MP's chemsys formatting.
+    # Sorted, canonical element order - same as MP's chemsys formatting.
     elements: list[str] = sorted({el for el in chemsys_str.replace(",", "-").split("-") if el})
 
     points: list[dict[str, Any]] = []
@@ -76,7 +77,7 @@ def _phase_diagram_viz(result: dict[str, Any]) -> dict[str, Any]:
 
     # For the visualisation, collapse polymorphs that share a composition
     # to a single lowest-energy representative. Applies to binary AND
-    # ternary chemsys — both project to a 2-D plot where two polymorphs
+    # ternary chemsys - both project to a 2-D plot where two polymorphs
     # of the same formula sit at exactly the same point. The full
     # polymorph list still goes to the LLM via the un-trimmed tool result.
     if len(elements) in (2, 3):
@@ -133,7 +134,7 @@ STATIC_DIR = Path(__file__).parent / "static"
 RUN_TTL_SECONDS = 600  # how long we keep a finished run around for late pollers
 MAX_CONCURRENT_RUNS = 8
 
-# Singleton MCP instance — created at module load so its session manager
+# Singleton MCP instance - created at module load so its session manager
 # is the same one used by both the SSE and Streamable-HTTP mounts below,
 # and by the OpenAI Responses API agent which calls it over loopback HTTP.
 from matscout.mcp_server import mcp as mcp_instance  # noqa: E402
@@ -145,11 +146,11 @@ async def _lifespan(_: FastAPI) -> Any:
 
     Two things hang off here:
 
-    1. **OPENAI_API_KEY presence check** — the web playground uses gpt-4o,
+    1. **OPENAI_API_KEY presence check** - the web playground uses gpt-4o,
        so this is mandatory. We let config.py keep ``openai_api_key`` as
        optional (so the standalone MCP stdio entrypoint can boot without
        it), and fail fast here for the web layer.
-    2. **MCP session manager** — FastMCP's Streamable-HTTP transport runs
+    2. **MCP session manager** - FastMCP's Streamable-HTTP transport runs
        its session bookkeeping in an anyio task group. Mounting the app
        without entering ``session_manager.run()`` produces
        ``RuntimeError("Task group is not initialized")`` on the first
@@ -162,7 +163,7 @@ async def _lifespan(_: FastAPI) -> Any:
             "OPENAI_API_KEY is not configured. The web playground uses gpt-4o "
             "as the agent's reasoning layer; please set OPENAI_API_KEY in the "
             "environment before starting uvicorn. (Note: the MCP server entry "
-            "point does not need this key — clients bring their own LLM.)"
+            "point does not need this key: clients bring their own LLM.)"
         )
 
     async with mcp_instance.session_manager.run():
@@ -171,19 +172,21 @@ async def _lifespan(_: FastAPI) -> Any:
 
 app = FastAPI(
     title="matscout",
-    description="Materials Project research agent — MCP server + OpenAI agent.",
+    description="Materials Project research agent: MCP server + OpenAI agent.",
     version="0.1.0",
     lifespan=_lifespan,
 )
 
-# ── MCP server, mounted on the same uvicorn process ─────────────────────────
-# The same 10 tools the OpenAI agent uses are also exposed as a live MCP
-# endpoint. Two transports for client compatibility:
+# --- MCP server, mounted on the same uvicorn process ---
+# All 25 tools in ALL_TOOLS are exposed as a live MCP endpoint. The OpenAI
+# agent calls them through this same endpoint: the two-phase run allows 23
+# of them (per-phase allow-lists in agent/runner.py), snapshot resume allows
+# all 25. Two transports for client compatibility:
 #
-#   /mcp/sse/            — SSE stream (GET, long-lived event-stream)
-#   /mcp/sse/messages/   — SSE client→server posts (advertised in the
+#   /mcp/sse/            - SSE stream (GET, long-lived event-stream)
+#   /mcp/sse/messages/   - SSE client-to-server posts (advertised in the
 #                          handshake endpoint event)
-#   /mcp/http/           — Streamable HTTP (single POST endpoint, modern
+#   /mcp/http/           - Streamable HTTP (single POST endpoint, modern
 #                          transport; what OpenAI's Responses API
 #                          expects as a remote MCP server URL, and what
 #                          Claude Desktop's `url` field uses)
@@ -201,8 +204,8 @@ app.mount("/mcp/sse", mcp_instance.sse_app())
 app.mount("/mcp/http", mcp_instance.streamable_http_app())
 
 
-# ── In-memory run registry ──────────────────────────────────────────────────
-# This is intentionally a single-process dict — one uvicorn worker, low
+# --- In-memory run registry ---
+# This is intentionally a single-process dict - one uvicorn worker, low
 # concurrency. If we ever scale out we'd put this in Redis, but the cost of
 # that abstraction now isn't worth it.
 
@@ -230,7 +233,7 @@ class Conversation:
     """In-memory state of a multi-turn agent conversation.
 
     Under the Responses API + MCP path the canonical continuation token
-    is OpenAI's ``previous_response_id`` — they store the prior message
+    is OpenAI's ``previous_response_id`` - they store the prior message
     list for us, so we just hand back the last response id on the next
     turn and the model picks up where it left off.
 
@@ -255,7 +258,7 @@ class Conversation:
 _runs: dict[str, Run] = {}
 _conversations: dict[str, Conversation] = {}
 _runs_lock = asyncio.Lock()
-CONVERSATION_TTL_SECONDS = 3600  # 1 h — covers a long research session
+CONVERSATION_TTL_SECONDS = 3600  # 1 h - covers a long research session
 
 
 def _event_payload(ev: TraceEvent) -> dict[str, Any]:
@@ -325,7 +328,7 @@ def _persist(run: Run, *, include_metadata: bool = False) -> None:
 
 
 async def _drive_run(run: Run) -> None:
-    """Background coroutine — runs the agent and pumps events into ``run.events``."""
+    """Background coroutine - runs the agent and pumps events into ``run.events``."""
     loop = asyncio.get_running_loop()
     # Steer the LLM's natural-language output without touching the tool layer.
     # The system prompt stays English (tool docs / matsci jargon don't benefit
@@ -334,20 +337,20 @@ async def _drive_run(run: Run) -> None:
     if run.locale == "ru":
         # Russian glossary is intentionally strict: materials-science
         # jargon has no canonical Russian rendering and the model tends
-        # to invent ugly transliterations (we caught it writing "выше
-        # габиита" for "above the hull"). The safest policy is "leave
-        # these tokens in English, only translate the surrounding prose".
+        # to invent transliterations of "above the hull". The safest policy
+        # is "leave these tokens in English, only translate the prose".
         locale_hint = (
-            "\n\nВажно: финальный ответ пользователю — на русском языке. "  # noqa: RUF001
-            "ВНУТРЕННИЕ tool calls и рассуждения — на английском.\n\n"
-            "Глоссарий (эти термины оставляй на английском, не переводи и не транслитерируй):\n"
+            "\n\nImportant: write the final answer to the user in Russian. "
+            "Keep internal tool calls and reasoning in English.\n\n"
+            "Glossary (keep these terms in English; do not translate or transliterate them):\n"
             "  band gap, formation energy, energy above hull, convex hull, on hull, "
             "above hull, metastable, stable, unstable, polymorph, space group, "
-            "Wyckoff, point group, formula, mp-id (mp-149, mp-66 …), "
-            "Fd-3m, P3_121, eV, eV/atom, meV, meV/atom, g/cm³, K.\n"
-            "Числа и символы химических формул — без перевода (Si, NaSn5, SiO₂). "
-            "Можно писать «материал на convex hull» или «выше convex hull на 23 meV/atom», "
-            "но НЕ «выше выпуклой оболочки» и тем более не «габиита»."  # noqa: RUF001
+            "Wyckoff, point group, formula, mp-id (mp-149, mp-66, ...), "
+            "Fd-3m, P3_121, eV, eV/atom, meV, meV/atom, g/cm3, K.\n"
+            "Keep numbers and chemical formulas as they are (Si, NaSn5, SiO2). "
+            "Write 'convex hull' in Latin script inside the Russian sentence "
+            "(for example 'on the convex hull', '23 meV/atom above the convex hull'); "
+            "never translate it as a Russian phrase for 'convex envelope' and never transliterate 'hull'."
         )
     from matscout.agent.prompts import SYSTEM_PROMPT_V1
 
@@ -402,14 +405,14 @@ async def _drive_run(run: Run) -> None:
         run.status = "done"
         # Park the response_id against the conversation so the next
         # /api/query with this conversation_id resumes via OpenAI's
-        # server-side state. messages stays empty in steady state — only
+        # server-side state. messages stays empty in steady state - only
         # populated when we resumed from a snapshot.
         if run.conversation_id is not None and final_response_id is not None:
             conv = _conversations.get(run.conversation_id)
             if conv is not None:
                 conv.last_response_id = final_response_id
                 # Once we've completed at least one Responses turn, drop
-                # the snapshot-reconstructed messages — OpenAI now has the
+                # the snapshot-reconstructed messages - OpenAI now has the
                 # canonical state.
                 conv.messages = []
                 conv.last_used_at = time.time()
@@ -448,7 +451,7 @@ async def _gc_old_runs() -> None:
             _conversations.pop(cid, None)
 
 
-# ── HTTP surface ─────────────────────────────────────────────────────────────
+# --- HTTP surface ---
 
 
 class QueryRequest(BaseModel):
@@ -485,7 +488,7 @@ async def start_query(req: QueryRequest) -> QueryAccepted:
             )
         # Look up or open a conversation. Clients hand back the id we issued;
         # if it's unknown to us (e.g. server restart), we silently mint a new
-        # one rather than 400 — the cost is just losing prior context, not
+        # one rather than 400 - the cost is just losing prior context, not
         # rejecting the user's question.
         cid = req.conversation_id
         if cid is None or cid not in _conversations:
@@ -493,7 +496,7 @@ async def start_query(req: QueryRequest) -> QueryAccepted:
             _conversations[cid] = Conversation(conversation_id=cid, locale=req.locale)
         else:
             conv = _conversations[cid]
-            # Reject if a turn for this conversation is already in flight —
+            # Reject if a turn for this conversation is already in flight -
             # OpenAI rejects parallel uses of the same previous_response_id,
             # and even without that, racing turns interleave the
             # last_response_id update non-deterministically. 429 lets the
@@ -543,7 +546,7 @@ async def poll_query(request_id: str, since: int = 0) -> PollResponse:
     )
 
 
-# ── /r/{id} — permanent snapshot view ────────────────────────────────────────
+# --- /r/{id} - permanent snapshot view ---
 
 
 @app.get("/api/research/{request_id}")
@@ -557,7 +560,7 @@ async def get_research(request_id: str) -> dict[str, Any]:
 
 @app.get("/r/{request_id}", response_class=HTMLResponse)
 async def view_research(request_id: str) -> HTMLResponse:
-    """Serve the SPA — the JS sniffs the URL path and replays the saved run."""
+    """Serve the SPA - the JS sniffs the URL path and replays the saved run."""
     return HTMLResponse((STATIC_DIR / "index.html").read_text(encoding="utf-8"))
 
 
@@ -572,7 +575,7 @@ async def resume_from_snapshot(request_id: str) -> ResumeResponse:
 
     Lets a visitor land on /r/{id} and ask a follow-up question with the
     original run's full context. We rebuild the message list (system,
-    original user query, the assistant↔tool exchange, the original final
+    original user query, the assistant and tool exchange, the original final
     answer), park it in the in-memory _conversations registry, and hand
     back the new conversation_id so the client can pass it on subsequent
     POST /api/query calls.
@@ -614,7 +617,7 @@ async def citation_bibtex(request_id: str, request: Request) -> Response:
 async def download_structure(material_id: str, fmt: str) -> Response:
     """Stream the structure file with attachment-Disposition so browsers save it.
 
-    Bypasses the agent entirely — useful for the Download CIF button next
+    Bypasses the agent entirely - useful for the Download CIF button next
     to each mp-id link in the rendered answer.
     """
     if fmt not in {"cif", "poscar", "xyz"}:
