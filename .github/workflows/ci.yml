@@ -24,15 +24,15 @@ jobs:
         run: uv sync --extra dev
 
       - name: Ruff (lint)
-        run: uv run ruff check matscout tests
+        run: uv run ruff check .
 
       - name: Ruff (format)
-        run: uv run ruff format --check matscout tests
+        run: uv run ruff format --check matscout tests web
 
       - name: Mypy
-        run: uv run mypy matscout
+        run: uv run mypy matscout web
 
-      - name: Pytest (offline only — `live` marker is auto-skipped without keys)
+      - name: Pytest (offline only, `live` marker is auto-skipped without keys)
         run: uv run pytest -v
 
   docker-build:
@@ -40,7 +40,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
-      - name: Build image (no push) — verifies Dockerfile stays green
+      - name: Build image (no push), verifies Dockerfile stays green
         uses: docker/build-push-action@v6
         with:
           context: .
