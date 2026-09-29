@@ -1,4 +1,4 @@
-"""Pytest wrapper — each YAML case becomes its own test, auto-skipped without keys."""
+"""Pytest wrapper - each YAML case becomes its own test, auto-skipped without keys."""
 
 from __future__ import annotations
 

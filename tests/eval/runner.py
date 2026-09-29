@@ -1,4 +1,4 @@
-"""Standalone eval runner — also exposed via the pytest tests below.
+"""Standalone eval runner - also exposed via the pytest tests below.
 
 Usage:
     uv run python -m tests.eval.runner            # human-readable
@@ -87,12 +87,12 @@ def _check_assertions(
 
     if "answer_contains_all" in a:
         needles = a["answer_contains_all"]
-        missing = [n for n in needles if n.lower() not in answer.lower()]
+        missing_text = [n for n in needles if n.lower() not in answer.lower()]
         out.append(
             AssertionResult(
                 "answer_contains_all",
-                not missing,
-                "ok" if not missing else f"missing: {missing}",
+                not missing_text,
+                "ok" if not missing_text else f"missing: {missing_text}",
             )
         )
 
@@ -122,7 +122,8 @@ def _check_assertions(
 def run_case(case: dict[str, Any]) -> CaseResult:
     query = case["query"].strip()
     start = time.monotonic()
-    result = run_agent(query, max_turns=case.get("assertions", {}).get("max_turns", 10))
+    # The tool-call cap is checked as an assertion on the result (see max_turns above).
+    result = run_agent(query)
     elapsed = time.monotonic() - start
 
     return CaseResult(
@@ -157,16 +158,16 @@ def main() -> int:
     results: list[CaseResult] = []
     for c in cases:
         if not args.json:
-            print(f"\n▸ {c['name']}", flush=True)
+            print(f"\ncase {c['name']}", flush=True)
         r = run_case(c)
         results.append(r)
         if not args.json:
-            mark = "✓" if r.passed else "✗"
+            mark = "PASS" if r.passed else "FAIL"
             print(
                 f"  {mark} {r.turns} turn(s), {r.elapsed_seconds:.1f}s, tools: {','.join(r.tools_used)}"
             )
             for a in r.assertions:
-                inner = "✓" if a.passed else "✗"
+                inner = "PASS" if a.passed else "FAIL"
                 print(f"    {inner} {a.name}: {a.detail}")
 
     passed = sum(1 for r in results if r.passed)

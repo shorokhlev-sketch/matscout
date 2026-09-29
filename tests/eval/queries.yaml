@@ -1,4 +1,4 @@
-# matscout agent eval — natural-language queries × structured assertions.
+# matscout agent eval: natural-language queries x structured assertions.
 #
 # Each case runs the full agent loop against a real OpenAI + real MP.
 # Assertions are deliberately loose where the answer is open-ended;
