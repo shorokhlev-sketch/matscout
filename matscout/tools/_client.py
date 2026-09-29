@@ -1,22 +1,24 @@
 """Lazy MPRester singleton + injectable cache.
 
 Tools call `get_client()` to reach the live API and `get_cache()` for
-read-through caching. Both are easy to monkeypatch in tests — that's
+read-through caching. Both are easy to monkeypatch in tests - that's
 the *only* reason this lives in its own module.
 """
 
 from __future__ import annotations
 
+import os
 from typing import Any, Protocol
 
 from mp_api.client import MPRester
+from pydantic import ValidationError
 
 from matscout.cache import Cache
 from matscout.config import get_settings
 
 
 class _ClientLike(Protocol):
-    """Minimal slice of MPRester we use — lets tests pass a mock."""
+    """Minimal slice of MPRester we use - lets tests pass a mock."""
 
     materials: Any
 
@@ -35,7 +37,7 @@ def get_client() -> _ClientLike:
 
 
 def set_client(client: _ClientLike | None) -> None:
-    """Test hook — inject a mock, or `None` to reset the singleton."""
+    """Test hook - inject a mock, or `None` to reset the singleton."""
     global _client
     _client = client
 
@@ -52,6 +54,26 @@ def get_cache() -> Cache:
 
 
 def set_cache(cache: Cache | None) -> None:
-    """Test hook — inject an in-memory / tmp-dir cache, or `None` to reset."""
+    """Test hook - inject an in-memory / tmp-dir cache, or `None` to reset."""
     global _cache
     _cache = cache
+
+
+_USER_AGENT = "matscout/0.1 (+https://matscout.prfo.design)"
+
+
+def polite_user_agent() -> str:
+    """User-Agent for the polite pools of OpenAlex and Crossref.
+
+    Adds ``mailto:`` only when MATSCOUT_CONTACT_EMAIL is set, so the
+    source ships no personal address.
+    """
+    try:
+        email = get_settings().contact_email
+    except ValidationError:
+        # Settings require MP_API_KEY; the literature tools do not.
+        email = os.environ.get("MATSCOUT_CONTACT_EMAIL")
+    email = (email or "").strip()
+    if not email:
+        return _USER_AGENT
+    return f"matscout/0.1 (+https://matscout.prfo.design; mailto:{email})"

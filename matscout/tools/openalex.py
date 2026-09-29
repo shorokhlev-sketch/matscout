@@ -1,9 +1,9 @@
-"""OpenAlex client — 240M+ scholarly works, free REST, no API key.
+"""OpenAlex client - 240M+ scholarly works, free REST, no API key.
 
 A stable counterpart to Semantic Scholar (which we disabled because
 its anonymous endpoint rate-limits aggressively from cloud egress).
-OpenAlex covers the same kind of bibliometric metadata — title,
-authors, year, DOI, abstract, cited-by count — but with much friendlier
+OpenAlex covers the same kind of bibliometric metadata - title,
+authors, year, DOI, abstract, cited-by count - but with much friendlier
 ungated access and global academic coverage.
 
 Use this whenever the user asks "what's been published about X" or
@@ -17,9 +17,8 @@ from typing import Any
 
 import httpx
 
-from matscout.tools._client import get_cache
+from matscout.tools._client import get_cache, polite_user_agent
 
-_USER_AGENT = "matscout/0.1 (mailto:shorokh.lev@gmail.com)"
 _HTTP_TIMEOUT = 15.0
 _BASE = "https://api.openalex.org"
 
@@ -84,7 +83,9 @@ def search_openalex(
 
     try:
         with httpx.Client(timeout=_HTTP_TIMEOUT, follow_redirects=True) as c:
-            resp = c.get(f"{_BASE}/works", params=params, headers={"User-Agent": _USER_AGENT})
+            resp = c.get(
+                f"{_BASE}/works", params=params, headers={"User-Agent": polite_user_agent()}
+            )
     except (httpx.HTTPError, OSError) as e:
         return {
             "query": query,
@@ -117,7 +118,7 @@ def search_openalex(
         abs_inv = w.get("abstract_inverted_index") or {}
         abstract_text = _abstract_from_inverted_index(abs_inv)
 
-        # Venue / journal — host_venue is being phased out, primary_location
+        # Venue / journal - host_venue is being phased out, primary_location
         # is the modern field. Fall back gracefully.
         venue = None
         if w.get("primary_location"):

@@ -1,4 +1,4 @@
-"""Typed runtime configuration — pulled from environment (.env) on import."""
+"""Typed runtime configuration - pulled from environment (.env) on import."""
 
 from __future__ import annotations
 
@@ -20,16 +20,20 @@ class Settings(BaseSettings):
     )
 
     mp_api_key: str = Field(..., alias="MP_API_KEY")
-    # OpenAI is only used by the web playground's gpt-4o agent. The MCP server
+    # OpenAI is only used by the gpt-4o agent (web playground, CLI). The MCP server
     # itself reasons via the connected client (Claude Desktop / Code), so it
     # must boot and run tools without an OpenAI key. We make the field
     # optional here; the web layer asserts presence at startup explicitly.
     openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
 
+    # Contact address for the polite pools of OpenAlex and Crossref. Optional:
+    # without it, their User-Agent carries no mailto.
+    contact_email: str | None = Field(default=None, alias="MATSCOUT_CONTACT_EMAIL")
+
     log_format: Literal["dev", "json"] = Field(default="dev", alias="MATSCOUT_LOG_FORMAT")
     cache_ttl_days: int = Field(default=30, alias="MATSCOUT_CACHE_TTL_DAYS", ge=1, le=365)
 
-    # Paths — derived, not from env
+    # Paths - derived, not from env
     project_root: Path = Path(__file__).resolve().parents[1]
 
     @property
@@ -47,7 +51,7 @@ _settings: Settings | None = None
 
 
 def get_settings() -> Settings:
-    """Lazy singleton — avoids import-time failure when env not yet set."""
+    """Lazy singleton - avoids import-time failure when env not yet set."""
     global _settings
     if _settings is None:
         _settings = Settings()

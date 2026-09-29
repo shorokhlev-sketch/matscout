@@ -1,13 +1,13 @@
-"""Literature-search tools — Semantic Scholar + CrossRef + arXiv.
+"""Literature-search tools - Semantic Scholar + Crossref + arXiv.
 
 Three free, no-auth APIs:
 
   - Semantic Scholar Graph API   (papers indexed across the web)
-  - CrossRef                     (canonical DOI metadata)
+  - Crossref                     (canonical DOI metadata)
   - arXiv                        (preprints, Atom XML feed)
 
 All three share our SQLite tool cache, so repeated lookups within a
-session are free. None require an API key — that's deliberate; we don't
+session are free. None require an API key - that's deliberate; we don't
 want to bake more secrets into the deploy.
 """
 
@@ -20,12 +20,12 @@ from xml.etree import ElementTree as ET
 import httpx
 
 from matscout.models import Paper, PaperList
-from matscout.tools._client import get_cache
+from matscout.tools._client import get_cache, polite_user_agent
 
-# Polite identifying header — CrossRef/Semantic-Scholar treat named UAs
-# better than anonymous ones. No credentials exposed.
-_UA = "matscout/0.1 (https://matscout.prfo.design; mailto:lev@prfo.design)"
-# arXiv export endpoints can take 10-20s under load from EU; CrossRef is
+# Crossref and Semantic Scholar treat named User-Agents better than
+# anonymous ones. polite_user_agent() adds a contact address only when
+# MATSCOUT_CONTACT_EMAIL is set.
+# arXiv export endpoints can take 10-20s under load from EU; Crossref is
 # usually <1s; Semantic Scholar varies. 30s gives the slow ones a chance
 # without making the agent feel stuck.
 _TIMEOUT = 30.0
@@ -48,7 +48,7 @@ def _http_get(
     last: httpx.Response | None = None
     last_exc: Exception | None = None
     with httpx.Client(
-        headers={"User-Agent": _UA},
+        headers={"User-Agent": polite_user_agent()},
         timeout=_TIMEOUT,
         follow_redirects=True,
     ) as c:
@@ -71,15 +71,14 @@ def _http_get(
 
     if last is not None:
         return last
-    # All attempts failed with network errors — synthesize a fake 504 response
+    # All attempts failed with network errors - synthesize a fake 504 response
     # so callers have a uniform shape to inspect.
     raise httpx.ReadTimeout(
         f"all {max_retries} retries timed out for {url}",
     ) from last_exc
 
 
-# ── Semantic Scholar ─────────────────────────────────────────────────────────
-
+# ---- Semantic Scholar ----
 _S2_BASE = "https://api.semanticscholar.org/graph/v1"
 _S2_FIELDS = (
     "paperId,title,abstract,year,authors.name,venue,citationCount,externalIds,openAccessPdf,url"
@@ -160,7 +159,7 @@ def get_papers_about(
     year_from: int | None = None,
     limit: int = 10,
 ) -> PaperList:
-    """Find papers that mention a specific material — by mp-id or formula.
+    """Find papers that mention a specific material - by mp-id or formula.
 
     We craft an S2 query that ORs the obvious terms (mp-id, formula); S2's
     relevance ranking does the heavy lifting from there.
@@ -181,13 +180,12 @@ def get_papers_about(
     return find_papers(query, year_from=year_from, limit=limit)
 
 
-# ── CrossRef ─────────────────────────────────────────────────────────────────
-
+# ---- Crossref ----
 _CROSSREF = "https://api.crossref.org/works"
 
 
 def get_doi_metadata(doi: str) -> Paper:
-    """Resolve a DOI to a CrossRef record (authors, year, title, journal)."""
+    """Resolve a DOI to a Crossref record (authors, year, title, journal)."""
     doi = doi.strip().lstrip("doi:").strip()
     if not doi:
         raise ValueError("doi must not be empty")
@@ -215,7 +213,7 @@ def get_doi_metadata(doi: str) -> Paper:
     abstract_raw = msg.get("abstract") or None
     abstract = None
     if abstract_raw:
-        # CrossRef ships JATS XML in 'abstract' — strip tags.
+        # Crossref ships JATS XML in 'abstract' - strip tags.
         try:
             abstract = "".join(
                 t for t in ET.fromstring(f"<root>{abstract_raw}</root>").itertext()
@@ -239,8 +237,7 @@ def get_doi_metadata(doi: str) -> Paper:
     return paper
 
 
-# ── arXiv ────────────────────────────────────────────────────────────────────
-
+# ---- arXiv ----
 _ARXIV = "http://export.arxiv.org/api/query"
 _ARXIV_NS = {"atom": "http://www.w3.org/2005/Atom", "arxiv": "http://arxiv.org/schemas/atom"}
 
@@ -320,7 +317,7 @@ def find_preprints(
 
     if max_age_days is not None:
         current_year = time.gmtime().tm_year
-        # Coarse year filter — fine-grained date comparison would need parsing
+        # Coarse year filter - fine-grained date comparison would need parsing
         # the 'published' field, but year-level is good enough at PhD scope.
         cutoff_year = current_year - max(0, max_age_days // 365)
         papers = [p for p in papers if (p.year or 0) >= cutoff_year]
