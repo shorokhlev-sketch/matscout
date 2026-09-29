@@ -1,6 +1,7 @@
 # Secrets
 .env
-.env.local
+.env.*
+!.env.example
 
 # uv / Python
 .venv/
@@ -29,4 +30,12 @@ cache/
 
 # Eval outputs
 tests/eval/results/
+
+# Local tool config (holds API keys)
 .mcp.json
+.claude/
+
+# Coverage and logs
+.coverage
+htmlcov/
+*.log
