@@ -14,7 +14,7 @@ services:
     restart: unless-stopped
 
   # Run the MCP server instead of the web playground:
-  #   docker compose run --rm mcp
+  #   docker compose run --rm -T mcp   (-T for piped input or an MCP client)
   mcp:
     build: .
     profiles: ["mcp"]

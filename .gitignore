@@ -28,12 +28,18 @@ cache/
 *.swp
 .DS_Store
 
+# Commit stamp baked by deploy.sh (provenance.py falls back to git)
+VERSION
+
 # Eval outputs
 tests/eval/results/
 
 # Local tool config (holds API keys)
 .mcp.json
 .claude/
+
+# Local review notes (hold server details)
+docs/.facts-ledger.json
 
 # Coverage and logs
 .coverage
