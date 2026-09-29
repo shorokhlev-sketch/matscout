@@ -1,4 +1,4 @@
-"""`python -m matscout` — health check that env + deps are wired."""
+"""`python -m matscout` - health check that env + deps are wired."""
 
 from __future__ import annotations
 
@@ -11,12 +11,12 @@ def main() -> int:
     try:
         s = get_settings()
     except Exception as e:
-        print(f"✗ config: {e}", file=sys.stderr)
+        print(f"FAIL config: {e}", file=sys.stderr)
         return 1
 
-    print("matscout · health check")
+    print("matscout health check")
     print(
-        f"  MP key:            {'set (' + s.mp_api_key[:6] + '…)' if s.mp_api_key else 'MISSING'}"
+        f"  MP key:            {'set (' + s.mp_api_key[:6] + '...)' if s.mp_api_key else 'MISSING'}"
     )
     print(f"  OpenAI key:        {'set' if s.openai_api_key else 'MISSING'}")
     print(f"  Log format:        {s.log_format}")
@@ -30,9 +30,9 @@ def main() -> int:
         import mp_api  # noqa: F401
         import openai  # noqa: F401
 
-        print("  Deps:              mp-api ✓  mcp ✓  openai ✓  fastapi ✓")
+        print("  Deps:              mp-api OK, mcp OK, openai OK, fastapi OK")
     except ImportError as e:
-        print(f"  Deps:              ✗ {e}", file=sys.stderr)
+        print(f"  Deps:              FAIL {e}", file=sys.stderr)
         return 1
 
     return 0
